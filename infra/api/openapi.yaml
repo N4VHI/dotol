@@ -1,0 +1,700 @@
+openapi: 3.0.3
+info:
+  title: API del MVP - Lista de tareas con chatbot
+  version: 0.1.0
+  description: |
+    Contrato de la API. Los nombres de campo coinciden con los de las tablas
+    DynamoDB (sesiones_evaluacion, tareas, propuestas).
+
+    Reglas generales
+    - Todos los endpoints requieren un JWT de Cognito (Authorization: Bearer <token>).
+    - id_usuario NUNCA viaja en la URL ni en el cuerpo: se toma del claim "sub" del JWT.
+    - Fechas: ISO 8601 con offset (por ejemplo 2026-10-12T19:40:00-05:00).
+    - Los valores de "op" en las acciones son los mismos que devuelve el modelo: create, update, complete, delete.
+    - "Dia" para la cuota diaria = dia UTC.
+    - MVP: la lista de tareas no tiene paginacion.
+
+    Flujo de chat
+    1. POST /chat devuelve una propuesta (status "pendiente"); no modifica las tareas.
+    2. El usuario pulsa ACEPTAR (POST /propuestas/{id}/aceptar) o cancela (POST /propuestas/{id}/cancelar).
+    3. Si en lugar de eso escribe otro mensaje, el cliente vuelve a llamar a POST /chat con el mismo id_hilo:
+       la propuesta pendiente pasa a "continuada" y se crea una nueva propuesta en el mismo hilo.
+
+servers:
+  - url: https://app.example.com/api
+    description: Dominio propio (CloudFront enruta /api/* hacia API Gateway)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Sesiones
+    description: Sesiones de evaluacion (tabla sesiones_evaluacion)
+  - name: Chat
+    description: Mensajes al chatbot y propuestas (tabla propuestas)
+  - name: Tareas
+    description: Lista de tareas (tabla tareas)
+  - name: Uso
+    description: Cuota diaria de mensajes
+
+paths:
+
+  /sesiones:
+    get:
+      tags: [Sesiones]
+      operationId: listarSesiones
+      summary: Lista las sesiones de evaluacion del usuario (maximo 2)
+      responses:
+        '200':
+          description: Sesiones del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sesiones]
+                properties:
+                  sesiones:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sesion'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+    post:
+      tags: [Sesiones]
+      operationId: iniciarSesion
+      summary: Inicia una sesion de evaluacion
+      description: Crea el item con fecha_inicio = hora del servidor y cant_clicks = 0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo_prueba, orden]
+              properties:
+                tipo_prueba:
+                  $ref: '#/components/schemas/TipoPrueba'
+                orden:
+                  $ref: '#/components/schemas/Orden'
+      responses:
+        '201':
+          description: Sesion creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sesion'
+        '400':
+          $ref: '#/components/responses/ValidacionFallida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '409':
+          description: Ya existe una sesion de ese tipo_prueba para el usuario (codigo SESION_YA_EXISTE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sesiones/{tipo_prueba}:
+    patch:
+      tags: [Sesiones]
+      operationId: actualizarSesion
+      summary: Actualiza cant_clicks y/o las respuestas de los cuestionarios
+      parameters:
+        - $ref: '#/components/parameters/TipoPrueba'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                cant_clicks:
+                  type: integer
+                  minimum: 0
+                respuestas_sus:
+                  $ref: '#/components/schemas/RespuestasSus'
+                respuestas_raw_tlx:
+                  $ref: '#/components/schemas/RespuestasRawTlx'
+      responses:
+        '200':
+          description: Sesion actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sesion'
+        '400':
+          $ref: '#/components/responses/ValidacionFallida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /sesiones/{tipo_prueba}/finalizar:
+    post:
+      tags: [Sesiones]
+      operationId: finalizarSesion
+      summary: Cierra la sesion (fecha_fin = hora del servidor)
+      parameters:
+        - $ref: '#/components/parameters/TipoPrueba'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cant_clicks:
+                  type: integer
+                  minimum: 0
+                  description: Conteo final de clics del cliente
+      responses:
+        '200':
+          description: Sesion finalizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sesion'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La sesion ya estaba finalizada (codigo ESTADO_INVALIDO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /chat:
+    post:
+      tags: [Chat]
+      operationId: enviarMensaje
+      summary: Envia un mensaje; la IA devuelve una propuesta sin tocar las tareas
+      description: |
+        Pasos en el backend: valida el cuerpo, comprueba la cuota diaria, carga las tareas
+        pendientes del usuario, llama al modelo, valida la salida y guarda la propuesta.
+
+        Si se envia id_hilo, la propuesta pendiente de ese hilo pasa a "continuada"
+        (con fecha_resolucion) y su mensaje y acciones se usan como contexto para la nueva.
+        La primera propuesta de un hilo recibe id_hilo = su propio id_propuesta.
+
+        La IA puede devolver acciones = [] (por ejemplo ante un saludo); la propuesta se guarda igual.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mensaje_usuario, zona_horaria, fecha_cliente]
+              properties:
+                mensaje_usuario:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                zona_horaria:
+                  type: string
+                  description: Zona horaria IANA del cliente
+                  example: America/Lima
+                fecha_cliente:
+                  type: string
+                  description: Fecha y hora actual del cliente, ISO 8601 con offset
+                  example: '2026-10-12T19:40:00-05:00'
+                id_hilo:
+                  type: string
+                  description: Solo para continuar un hilo existente
+            example:
+              mensaje_usuario: Recuerdame comprar leche y llamar a John manana
+              zona_horaria: America/Lima
+              fecha_cliente: '2026-10-12T19:40:00-05:00'
+      responses:
+        '200':
+          description: Propuesta generada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Propuesta'
+              example:
+                id_propuesta: 01JA0000000000000000000001
+                id_hilo: 01JA0000000000000000000001
+                respuesta_bot: Voy a agregar dos tareas para manana.
+                acciones:
+                  - op: create
+                    nombre: Comprar leche
+                    fecha_hacer: '2026-10-13'
+                  - op: create
+                    nombre: Llamar a John
+                    fecha_hacer: '2026-10-13'
+                status: pendiente
+                fecha_creacion: '2026-10-12T19:40:02-05:00'
+        '400':
+          $ref: '#/components/responses/ValidacionFallida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El hilo no tiene una propuesta pendiente (codigo ESTADO_INVALIDO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/CuotaExcedida'
+        '502':
+          $ref: '#/components/responses/ErrorIA'
+
+  /propuestas/{id_propuesta}/aceptar:
+    post:
+      tags: [Chat]
+      operationId: aceptarPropuesta
+      summary: Aplica las acciones de la propuesta en una sola transaccion
+      description: |
+        Revalida que cada id_tarea de las acciones pertenezca al usuario, aplica las acciones
+        con TransactWriteItems y marca la propuesta como "aceptada" con fecha_resolucion.
+      parameters:
+        - $ref: '#/components/parameters/IdPropuesta'
+      responses:
+        '200':
+          description: Acciones aplicadas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [aplicadas, tareas]
+                properties:
+                  aplicadas:
+                    type: integer
+                    description: Numero de acciones aplicadas
+                  tareas:
+                    type: array
+                    description: Tareas creadas o modificadas por la propuesta
+                    items:
+                      $ref: '#/components/schemas/Tarea'
+              example:
+                aplicadas: 2
+                tareas:
+                  - id_tarea: 01JB0000000000000000000001
+                    nombre: Comprar leche
+                    fecha_creacion: '2026-10-12T19:41:10-05:00'
+                    fecha_hacer: '2026-10-13'
+                    creada_por_ia: true
+                    estado: pendiente
+                    id_propuesta: 01JA0000000000000000000001
+                    fecha_modificacion: '2026-10-12T19:41:10-05:00'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La propuesta no esta pendiente (aceptada, cancelada o continuada) (codigo ESTADO_INVALIDO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /propuestas/{id_propuesta}/cancelar:
+    post:
+      tags: [Chat]
+      operationId: cancelarPropuesta
+      summary: Descarta la propuesta (status cancelada)
+      parameters:
+        - $ref: '#/components/parameters/IdPropuesta'
+      responses:
+        '200':
+          description: Propuesta cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Propuesta'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La propuesta no esta pendiente (codigo ESTADO_INVALIDO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tareas:
+    get:
+      tags: [Tareas]
+      operationId: listarTareas
+      summary: Lista las tareas del usuario
+      description: Las tareas eliminadas nunca se devuelven.
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pendiente, completada, todas]
+            default: pendiente
+      responses:
+        '200':
+          description: Tareas del usuario, ordenadas por fecha de creacion
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tareas]
+                properties:
+                  tareas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tarea'
+        '400':
+          $ref: '#/components/responses/ValidacionFallida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+    post:
+      tags: [Tareas]
+      operationId: crearTarea
+      summary: Crea una tarea manualmente (creada_por_ia = false)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre:
+                  $ref: '#/components/schemas/NombreTarea'
+                descripcion:
+                  $ref: '#/components/schemas/DescripcionTarea'
+                categoria:
+                  type: string
+                fecha_hacer:
+                  $ref: '#/components/schemas/FechaHacer'
+      responses:
+        '201':
+          description: Tarea creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tarea'
+        '400':
+          $ref: '#/components/responses/ValidacionFallida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+
+  /tareas/{id_tarea}:
+    patch:
+      tags: [Tareas]
+      operationId: editarTarea
+      summary: Edita una tarea manualmente
+      description: |
+        Actualiza fecha_modificacion. Si estado pasa a "completada" se fija fecha_completada;
+        si vuelve a "pendiente" se elimina fecha_completada. Enviar fecha_hacer = null la borra.
+      parameters:
+        - $ref: '#/components/parameters/IdTarea'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                nombre:
+                  $ref: '#/components/schemas/NombreTarea'
+                descripcion:
+                  $ref: '#/components/schemas/DescripcionTarea'
+                categoria:
+                  type: string
+                fecha_hacer:
+                  allOf:
+                    - $ref: '#/components/schemas/FechaHacer'
+                  nullable: true
+                estado:
+                  type: string
+                  enum: [pendiente, completada]
+      responses:
+        '200':
+          description: Tarea actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tarea'
+        '400':
+          $ref: '#/components/responses/ValidacionFallida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    delete:
+      tags: [Tareas]
+      operationId: eliminarTarea
+      summary: Elimina una tarea (borrado logico, estado = eliminada)
+      parameters:
+        - $ref: '#/components/parameters/IdTarea'
+      responses:
+        '204':
+          description: Tarea eliminada
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /uso:
+    get:
+      tags: [Uso]
+      operationId: obtenerUso
+      summary: Mensajes usados hoy y limite diario
+      description: mensajes_hoy = numero de propuestas del usuario creadas en el dia UTC actual.
+      responses:
+        '200':
+          description: Uso del dia
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mensajes_hoy, limite_diario]
+                properties:
+                  mensajes_hoy:
+                    type: integer
+                    minimum: 0
+                  limite_diario:
+                    type: integer
+                    minimum: 1
+              example:
+                mensajes_hoy: 7
+                limite_diario: 30
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    TipoPrueba:
+      name: tipo_prueba
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TipoPrueba'
+    IdPropuesta:
+      name: id_propuesta
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Ulid'
+    IdTarea:
+      name: id_tarea
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Ulid'
+
+  responses:
+    ValidacionFallida:
+      description: Cuerpo o parametros invalidos (codigo VALIDACION_FALLIDA)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              codigo: VALIDACION_FALLIDA
+              mensaje: mensaje_usuario supera los 500 caracteres
+    NoAutorizado:
+      description: JWT ausente o invalido (lo devuelve API Gateway)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NoEncontrado:
+      description: El recurso no existe para este usuario (codigo NO_ENCONTRADO)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    CuotaExcedida:
+      description: Cuota diaria superada o peticiones limitadas (codigo CUOTA_EXCEDIDA)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              codigo: CUOTA_EXCEDIDA
+              mensaje: Limite diario de mensajes alcanzado
+    ErrorIA:
+      description: El modelo devolvio una salida invalida (codigo ERROR_IA)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [codigo, mensaje]
+          properties:
+            codigo:
+              type: string
+              enum:
+                - VALIDACION_FALLIDA
+                - NO_ENCONTRADO
+                - ESTADO_INVALIDO
+                - SESION_YA_EXISTE
+                - CUOTA_EXCEDIDA
+                - ERROR_IA
+                - ERROR_INTERNO
+            mensaje:
+              type: string
+
+    Ulid:
+      type: string
+      pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+
+    TipoPrueba:
+      type: string
+      enum: [ia, tradicional]
+
+    Orden:
+      type: integer
+      enum: [1, 2]
+      description: Que condicion hizo primero el participante
+
+    RespuestasSus:
+      type: array
+      description: 10 enteros de 1 a 5, en orden P1-P10
+      minItems: 10
+      maxItems: 10
+      items:
+        type: integer
+        minimum: 1
+        maximum: 5
+
+    RespuestasRawTlx:
+      type: array
+      description: >-
+        6 valores en este orden: mental, fisica, temporal, desempeno, esfuerzo, frustracion.
+        Escala 0-100 (pendiente de confirmar).
+      minItems: 6
+      maxItems: 6
+      items:
+        type: number
+        minimum: 0
+        maximum: 100
+
+    NombreTarea:
+      type: string
+      minLength: 1
+      maxLength: 100
+
+    DescripcionTarea:
+      type: string
+      maxLength: 500
+
+    FechaHacer:
+      type: string
+      description: >-
+        ISO 8601 con hora y offset (2026-10-13T15:00:00-05:00),
+        o solo fecha (2026-10-13) si no hay hora.
+
+    Sesion:
+      type: object
+      required: [tipo_prueba, fecha_inicio, cant_clicks, orden]
+      properties:
+        tipo_prueba:
+          $ref: '#/components/schemas/TipoPrueba'
+        fecha_inicio:
+          type: string
+        fecha_fin:
+          type: string
+        cant_clicks:
+          type: integer
+          minimum: 0
+        respuestas_sus:
+          $ref: '#/components/schemas/RespuestasSus'
+        respuestas_raw_tlx:
+          $ref: '#/components/schemas/RespuestasRawTlx'
+        orden:
+          $ref: '#/components/schemas/Orden'
+
+    Accion:
+      type: object
+      required: [op]
+      description: >-
+        create requiere nombre. update, complete y delete requieren id_tarea.
+        update acepta ademas los campos a cambiar.
+      properties:
+        op:
+          type: string
+          enum: [create, update, complete, delete]
+        id_tarea:
+          $ref: '#/components/schemas/Ulid'
+        nombre:
+          $ref: '#/components/schemas/NombreTarea'
+        descripcion:
+          $ref: '#/components/schemas/DescripcionTarea'
+        categoria:
+          type: string
+        fecha_hacer:
+          $ref: '#/components/schemas/FechaHacer'
+
+    Propuesta:
+      type: object
+      required: [id_propuesta, id_hilo, respuesta_bot, acciones, status, fecha_creacion]
+      properties:
+        id_propuesta:
+          $ref: '#/components/schemas/Ulid'
+        id_hilo:
+          $ref: '#/components/schemas/Ulid'
+        respuesta_bot:
+          type: string
+        acciones:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/Accion'
+        status:
+          type: string
+          enum: [pendiente, aceptada, cancelada, continuada]
+        fecha_creacion:
+          type: string
+        fecha_resolucion:
+          type: string
+
+    Tarea:
+      type: object
+      required: [id_tarea, nombre, fecha_creacion, creada_por_ia, estado, fecha_modificacion]
+      properties:
+        id_tarea:
+          $ref: '#/components/schemas/Ulid'
+        nombre:
+          $ref: '#/components/schemas/NombreTarea'
+        descripcion:
+          $ref: '#/components/schemas/DescripcionTarea'
+        categoria:
+          type: string
+        fecha_creacion:
+          type: string
+        fecha_hacer:
+          $ref: '#/components/schemas/FechaHacer'
+        creada_por_ia:
+          type: boolean
+        estado:
+          type: string
+          enum: [pendiente, completada]
+        id_propuesta:
+          $ref: '#/components/schemas/Ulid'
+        fecha_modificacion:
+          type: string
+        fecha_completada:
+          type: string
