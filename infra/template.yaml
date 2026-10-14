@@ -162,6 +162,36 @@ Resources:
       # DefaultRouteSettings: RouteSettings
       # RouteSettings: RouteSettings
 
-      
+# Lambda
+
+  FunctionMe:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/me/
+      Handler: me.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          TABLA_EVALUACIONES: !Ref SesionesEvaluacionTable
+          TABLA_TAREAS: !Ref TareasTable
+          TABLA_PROPUESTAS: !Ref PropuestasTable
+      Events:
+        Me:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /me
+            Method: GET
+
+
+Outputs:
+  ApiUrl:
+    Value: !Sub 'https://${ApiTodoChatbot}.execute-api.${AWS::Region}.amazonaws.com'
+  UserPoolId:
+    Value: !Ref UsuariosRegistro
+  UserPoolClientId:
+    Value: !Ref UsuariosRegistroCliente
 
 

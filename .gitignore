@@ -1,0 +1,8 @@
+# SAM
+.aws-sam/
+
+# Python
+.venv/
+__pycache__/
+
+# Frontend
