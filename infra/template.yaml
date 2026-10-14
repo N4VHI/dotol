@@ -4,18 +4,8 @@ Description: Tablas DynamoDB del MVP de lista de tareas con chatbot (sesiones_ev
 
 Resources:
 
-  # ---------------------------------------------------------------------------
-  # Tabla: sesiones_evaluacion
-  # ---------------------------------------------------------------------------
-  # Atributos (solo los de clave se declaran en CloudFormation):
-  #   id_usuario          S        PK  UUID (sub de Cognito)
-  #   tipo_prueba         S        SK  ia | tradicional
-  #   fecha_inicio        S            ISO 8601
-  #   fecha_fin           S            ISO 8601 (ausente hasta que termina)
-  #   cant_clicks         N            entero >= 0
-  #   respuestas_sus      L de N       10 enteros (1-5), orden P1-P10
-  #   respuestas_raw_tlx  L de N       6 valores: mental, fisica, temporal, desempeno, esfuerzo, frustracion
-  #   orden               N            1 | 2
+# DynamoDB
+
   SesionesEvaluacionTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -32,22 +22,7 @@ Resources:
         - AttributeName: tipo_prueba
           KeyType: RANGE
 
-  # ---------------------------------------------------------------------------
-  # Tabla: tareas
-  # ---------------------------------------------------------------------------
-  # Atributos (solo los de clave se declaran en CloudFormation):
-  #   id_usuario          S        PK  UUID
-  #   id_tarea            S        SK  ULID
-  #   categoria           S            lista cerrada (opcional)
-  #   nombre              S            max ~100 caracteres
-  #   descripcion         S            opcional, max ~500
-  #   fecha_creacion      S            ISO 8601
-  #   fecha_hacer         S            ISO 8601 con hora y offset (opcional)
-  #   creada_por_ia       BOOL         true | false
-  #   estado              S            pendiente | completada | eliminada
-  #   id_propuesta        S            ULID (solo si la creo la IA)
-  #   fecha_modificacion  S            ISO 8601
-  #   fecha_completada    S            ISO 8601 (ausente si no esta completada)
+
   TareasTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -64,23 +39,7 @@ Resources:
         - AttributeName: id_tarea
           KeyType: RANGE
 
-  # ---------------------------------------------------------------------------
-  # Tabla: propuestas
-  # ---------------------------------------------------------------------------
-  # Atributos (solo los de clave se declaran en CloudFormation):
-  #   id_usuario          S        PK  UUID
-  #   id_propuesta        S        SK  ULID
-  #   id_hilo             S            ULID
-  #   acciones            L de M       {op, id_tarea?, nombre?, descripcion?, fecha_hacer?, categoria?}
-  #                                    op: create | update | complete | delete
-  #   mensaje_usuario     S            max ~500 caracteres
-  #   respuesta_bot       S
-  #   status              S            pendiente | aceptada | cancelada | continuada
-  #   fecha_creacion      S            ISO 8601
-  #   fecha_resolucion    S            ISO 8601 (ausente mientras este pendiente)
-  #   tokens_in           N            entero
-  #   tokens_out          N            entero
-  #   latencia_ms         N            entero
+
   PropuestasTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -96,3 +55,113 @@ Resources:
           KeyType: HASH
         - AttributeName: id_propuesta
           KeyType: RANGE
+
+# Cognito
+
+  # Esto crea el user pool o sea donde se guarda a la gentita, tengoq ue chequear el lambdaconfig por si quiero hacer algo chévere lowkey
+  UsuariosRegistro:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AccountRecoverySetting: 
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      AdminCreateUserConfig: 
+        AllowAdminCreateUserOnly: False
+      AutoVerifiedAttributes: 
+        - email
+      DeletionProtection: INACTIVE
+      # LambdaConfig: 
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          PasswordHistorySize: 22
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+        SignInPolicy:
+          AllowedFirstAuthFactors:
+            - PASSWORD
+      Schema: 
+          - Name: given_name
+            AttributeDataType: String
+            Required: true
+            Mutable: true
+          - Name: family_name
+            AttributeDataType: String
+            Required: true
+            Mutable: true  
+          - Name: universidad
+            AttributeDataType: String
+            Required: false
+            Mutable: true  
+          - Name: codigo
+            AttributeDataType: String
+            Required: false
+            Mutable: true                
+      UsernameAttributes: 
+        - email
+      UsernameConfiguration: 
+          CaseSensitive: False
+      UserPoolName: todo-chatbot-usuarios
+      UserPoolTags: 
+        proyecto: tesis
+      UserPoolTier: ESSENTIALS
+      VerificationMessageTemplate: 
+        DefaultEmailOption: CONFIRM_WITH_CODE
+        EmailMessage: 'Verifica tu correo para Todol con el siguiente código: {####}'
+        EmailSubject: 'TODOL: Tu código de confirmación'
+
+  # El pool guarda a los usuarios, y el client es la puerta de entrada de la app a ese pool: define cómo se conecta y con qué permisos.
+  UsuariosRegistroCliente:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: todo-chatbot-usuarios-cliente
+        ExplicitAuthFlows: 
+          - ALLOW_USER_SRP_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_PASSWORD_AUTH
+        GenerateSecret: false
+        PreventUserExistenceErrors: ENABLED
+        SupportedIdentityProviders: 
+          - COGNITO
+        UserPoolId: !Ref UsuariosRegistro
+
+# API Gateway
+
+  ApiTodoChatbot:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth: 
+          Authorizers: 
+            Cognito:
+                IdentitySource: "$request.header.Authorization"
+                JwtConfiguration:
+                  issuer:  !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UsuariosRegistro}'
+                  audience:
+                    - !Ref UsuariosRegistroCliente
+          DefaultAuthorizer: Cognito
+      CorsConfiguration: 
+          AllowHeaders: 
+            - Authorization
+            - Content-Type
+          AllowMethods: 
+            - GET
+            - POST
+            - PATCH
+            - DELETE
+            - OPTIONS
+          AllowOrigins: 
+            - http://localhost:5173
+      Description: Api de acceso
+      Name: todo-chatbot-api
+      PropagateTags: True
+      Tags: 
+        proyecto: tesis
+      # DefaultRouteSettings: RouteSettings
+      # RouteSettings: RouteSettings
+
+      
+
+
