@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Tablas DynamoDB del MVP de lista de tareas con chatbot (sesiones_evaluacion, tareas, propuestas)
 
 Resources:
 
@@ -58,7 +57,7 @@ Resources:
 
 # Cognito
 
-  # Esto crea el user pool o sea donde se guarda a la gentita, tengoq ue chequear el lambdaconfig por si quiero hacer algo chévere lowkey
+  # Esto crea el user pool o sea donde se guarda a la gentita, tengo que chequear el lambdaconfig por si quiero hacer algo chévere lowkey
   UsuariosRegistro:
     Type: AWS::Cognito::UserPool
     Properties:
