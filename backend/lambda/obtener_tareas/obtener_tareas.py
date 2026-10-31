@@ -1,7 +1,7 @@
 import json
 import boto3
 import os
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 
 dynamodb = boto3.resource("dynamodb")
 tabla = dynamodb.Table(os.environ["TABLA_TAREAS"])
@@ -13,9 +13,8 @@ def lambda_handler(event, context):
         user_id = claims["sub"]
 
         resultado = tabla.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("id_usuario").eq(
-                user_id
-            )
+            KeyConditionExpression=Key("id_usuario").eq(user_id),
+            FilterExpression=Attr("estado").ne("eliminada"),
         )
 
         return {
