@@ -316,6 +316,56 @@ Resources:
             Path: /tareas/{id_tarea}/eliminar
             Method: PATCH
 
+  
+  # Funcion: Interpretar mensajes con DeepSeek
+  FunctionGenerarPropuesta:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/generar_propuesta/
+      Handler: generar_propuesta.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      Timeout: 180
+      MemorySize: 256
+
+      Environment:
+        Variables:
+          TABLA_TAREAS: !Ref TareasTable
+          TABLA_PROPUESTAS: !Ref PropuestasTable
+          BEDROCK_MODEL_ID: deepseek.v3-v1:0
+          ZONA_HORARIA: America/Lima
+
+      Policies:
+        - Statement:
+            - Sid: LeerTareas
+              Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt TareasTable.Arn
+
+            - Sid: GestionarPropuestas
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt PropuestasTable.Arn
+
+            - Sid: InvocarDeepSeek
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub
+                arn:aws:bedrock:${AWS::Region}::foundation-model/deepseek.v3-v1:0
+
+      Events:
+        GenerarPropuesta:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /propuestas/generar
+            Method: POST
 
 
 Outputs:
