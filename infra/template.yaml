@@ -163,6 +163,7 @@ Resources:
 
 # Lambda
 
+## Primera funcion
   FunctionMe:
     Type: AWS::Serverless::Function
     Properties:
@@ -183,6 +184,138 @@ Resources:
             ApiId: !Ref ApiTodoChatbot
             Path: /me
             Method: GET
+
+## Función: Obtener tareas del usuario
+  FunctionObtenerTareas:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/obtener_tareas/
+      Handler: obtener_tareas.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          TABLA_TAREAS: !Ref TareasTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TareasTable
+      Events:
+        ObtenerTareas:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /obtener_tareas
+            Method: GET 
+
+## Función: Registrar tarea
+  FunctionRegistrarTareas:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/registrar_tareas/
+      Handler: registrar_tareas.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          TABLA_TAREAS: !Ref TareasTable
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref TareasTable
+      Events:
+        RegistrarTareas:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /registrar_tareas
+            Method: POST 
+
+## Función: Actualizar tarea
+  FunctionActualizarTareas:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/actualizar_tareas/
+      Handler: actualizar_tareas.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          TABLA_TAREAS: !Ref TareasTable
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt TareasTable.Arn
+      Events:
+        ActualizarTareas:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /tareas/{id_tarea}
+            Method: PATCH 
+
+
+  # Función: Completar tarea del usuario
+  FunctionCompletarTarea:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/completar_tarea/
+      Handler: completar_tarea.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+
+      Environment:
+        Variables:
+          TABLA_TAREAS: !Ref TareasTable
+
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt TareasTable.Arn
+
+      Events:
+        CompletarTarea:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /tareas/{id_tarea}/completar
+            Method: PATCH
+
+  # Función: Eliminar tarea del usuario
+  FunctionEliminarTarea:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/eliminar_tarea/
+      Handler: eliminar_tarea.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+
+      Environment:
+        Variables:
+          TABLA_TAREAS: !Ref TareasTable
+
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt TareasTable.Arn
+
+      Events:
+        EliminarTarea:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /tareas/{id_tarea}/eliminar
+            Method: PATCH
+
 
 
 Outputs:

@@ -3,14 +3,8 @@ import json
 
 def lambda_handler(event, context):
     try:
-        claims = (
-            event.get("requestContext", {})
-            .get("authorizer", {})
-            .get("jwt", {})
-            .get("claims", {})
-        )
-
-        sub = claims.get("sub")
+        claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+        sub = claims["sub"]
 
         if not sub:
             return {
