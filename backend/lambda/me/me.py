@@ -19,6 +19,9 @@ def lambda_handler(event, context):
             "body": json.dumps({"message": "Welcome to TODOL!", "user_id": sub}),
         }
 
-    except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        raise
+    except Exception:
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Internal server error"}),
+        }

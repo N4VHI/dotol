@@ -51,6 +51,7 @@ def lambda_handler(event, context):
         descripcion = datos.get("descripcion")
         categoria = datos.get("categoria")
         fecha_hacer = datos.get("fecha_hacer")
+        fecha_dia = datos.get("fecha_dia")
 
         # 4. Validar nombre obligatorio
         if not isinstance(nombre, str) or not nombre.strip():
@@ -101,7 +102,14 @@ def lambda_handler(event, context):
             tarea["categoria"] = categoria
 
         if fecha_hacer is not None:
+            fecha_obj = datetime.fromisoformat(fecha_hacer)
+
             tarea["fecha_hacer"] = fecha_hacer
+            tarea["fecha_dia"] = fecha_obj.date().isoformat()
+
+        else:
+            if fecha_dia is not None:
+                tarea["fecha_dia"] = fecha_dia
 
         # 10. Guardar en DynamoDB
         tabla.put_item(

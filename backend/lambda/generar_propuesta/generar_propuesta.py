@@ -73,13 +73,20 @@ ESQUEMA_RESPUESTA = {
 def responder(status, datos):
     return {
         "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {"Content-Type": "application/json; charset=utf-8"},
         "body": json.dumps(datos, ensure_ascii=False),
     }
 
 
 def serializar_item(item):
     return {clave: serializador.serialize(valor) for clave, valor in item.items()}
+
+
+def obtener_fecha_tarea(item):
+    if item.get("fecha_dia"):
+        return item["fecha_dia"]
+
+    return fecha_local(item.get("fecha_hacer"))
 
 
 def fecha_local(valor):
@@ -117,7 +124,7 @@ def obtener_tareas_abiertas(user_id):
                 {
                     "id": item["id_tarea"],
                     "title": item["nombre"],
-                    "due": fecha_local(item.get("fecha_hacer")),
+                    "due": obtener_fecha_tarea(item),
                     "created_at": fecha_local(item["fecha_creacion"]),
                 }
             )
@@ -156,6 +163,40 @@ def obtener_propuesta_anterior(user_id, id_anterior):
         raise ValueError("La conversación ya tiene un mensaje posterior")
 
     return anterior
+
+
+def buscar_propuesta_pendiente(user_id):
+    propuestas = []
+    inicio = None
+
+    while True:
+        parametros = {
+            "KeyConditionExpression": Key("id_usuario").eq(user_id),
+            "ConsistentRead": True,
+        }
+
+        if inicio:
+            parametros["ExclusiveStartKey"] = inicio
+
+        resultado = propuestas_table.query(**parametros)
+
+        propuestas.extend(
+            p
+            for p in resultado.get("Items", [])
+            if p.get("status") == "pendiente" and not p.get("id_siguiente")
+        )
+
+        inicio = resultado.get("LastEvaluatedKey")
+
+        if not inicio:
+            break
+
+    if len(propuestas) > 1:
+        raise ValueError(
+            "Hay varias propuestas pendientes. Se requiere resolver la inconsistencia."
+        )
+
+    return propuestas[0] if propuestas else None
 
 
 def validar_acciones(salida, tareas_abiertas, hoy):
@@ -278,7 +319,10 @@ def lambda_handler(event, context):
         # 3. Consultar tareas y contexto
         tareas = obtener_tareas_abiertas(user_id)
 
-        anterior = obtener_propuesta_anterior(user_id, id_anterior)
+        if id_anterior:
+            anterior = obtener_propuesta_anterior(user_id, id_anterior)
+        else:
+            anterior = buscar_propuesta_pendiente(user_id)
 
         ahora_local = datetime.now(ZONA)
 
