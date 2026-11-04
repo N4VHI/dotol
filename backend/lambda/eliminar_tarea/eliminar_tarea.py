@@ -51,7 +51,6 @@ def lambda_handler(event, context):
             },
             ExpressionAttributeValues={
                 ":eliminada": "eliminada",
-                ":pendiente": "pendiente",
                 ":ahora": ahora,
             },
             ReturnValues="ALL_NEW",

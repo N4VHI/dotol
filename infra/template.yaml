@@ -3,7 +3,7 @@ Transform: AWS::Serverless-2016-10-31
 
 Resources:
 
-# DynamoDB
+# DynamoDB: ss
 
   SesionesEvaluacionTable:
     Type: AWS::DynamoDB::Table
@@ -54,6 +54,25 @@ Resources:
           KeyType: HASH
         - AttributeName: id_propuesta
           KeyType: RANGE
+
+  
+  CategoriasTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: categorias
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id_usuario
+          AttributeType: S
+        - AttributeName: id_categoria
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id_usuario
+          KeyType: HASH
+        - AttributeName: id_categoria
+          KeyType: RANGE
+
+
 
 # Cognito
 
@@ -142,6 +161,7 @@ Resources:
                     - !Ref UsuariosRegistroCliente
           DefaultAuthorizer: Cognito
       CorsConfiguration: 
+          MaxAge: 600
           AllowHeaders: 
             - Authorization
             - Content-Type
@@ -220,9 +240,21 @@ Resources:
       Environment:
         Variables:
           TABLA_TAREAS: !Ref TareasTable
+          TABLA_CATEGORIAS: !Ref CategoriasTable
       Policies:
-        - DynamoDBWritePolicy:
-            TableName: !Ref TareasTable
+      - Statement:
+          - Sid: RegistrarTareas
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+            Resource: !GetAtt TareasTable.Arn
+
+          - Sid: ConsultarYValidarCategorias
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:ConditionCheckItem
+            Resource: !GetAtt CategoriasTable.Arn
       Events:
         RegistrarTareas:
           Type: HttpApi
@@ -243,12 +275,22 @@ Resources:
       Environment:
         Variables:
           TABLA_TAREAS: !Ref TareasTable
+          TABLA_CATEGORIAS: !Ref CategoriasTable
       Policies:
         - Statement:
-            - Effect: Allow
+            - Sid: ActualizarYConsultarTarea
+              Effect: Allow
               Action:
                 - dynamodb:UpdateItem
+                - dynamodb:GetItem
               Resource: !GetAtt TareasTable.Arn
+
+            - Sid: ConsultarYValidarCategoria
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:ConditionCheckItem
+              Resource: !GetAtt CategoriasTable.Arn
       Events:
         ActualizarTareas:
           Type: HttpApi
@@ -333,6 +375,7 @@ Resources:
         Variables:
           TABLA_TAREAS: !Ref TareasTable
           TABLA_PROPUESTAS: !Ref PropuestasTable
+          TABLA_CATEGORIAS: !Ref CategoriasTable
           BEDROCK_MODEL_ID: deepseek.v3-v1:0
           ZONA_HORARIA: America/Lima
 
@@ -353,6 +396,12 @@ Resources:
                 - dynamodb:Query
               Resource: !GetAtt PropuestasTable.Arn
 
+            - Sid: LeerCategorias
+              Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt CategoriasTable.Arn
+
             - Sid: InvocarDeepSeek
               Effect: Allow
               Action:
@@ -370,6 +419,7 @@ Resources:
 
 
   # Función: Aceptar propuesta del agente
+  
   FunctionAceptarPropuesta:
     Type: AWS::Serverless::Function
     Properties:
@@ -384,6 +434,7 @@ Resources:
         Variables:
           TABLA_TAREAS: !Ref TareasTable
           TABLA_PROPUESTAS: !Ref PropuestasTable
+          TABLA_CATEGORIAS: !Ref CategoriasTable
 
       Policies:
         - Statement:
@@ -395,12 +446,19 @@ Resources:
                 - dynamodb:UpdateItem
               Resource: !GetAtt TareasTable.Arn
 
-            - Sid: LeerYActualizarPropuesta
+            - Sid: LeerYActualizarPropuestas
               Effect: Allow
               Action:
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
               Resource: !GetAtt PropuestasTable.Arn
+
+            - Sid: ConsultarYVerificarCategorias
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:ConditionCheckItem
+              Resource: !GetAtt CategoriasTable.Arn
 
       Events:
         AceptarPropuesta:
@@ -409,6 +467,7 @@ Resources:
             ApiId: !Ref ApiTodoChatbot
             Path: /propuestas/{id_propuesta}/aceptar
             Method: POST
+
 
 
   
@@ -472,6 +531,53 @@ Resources:
             Path: /propuestas
             Method: GET
 
+
+  # Función: Gestión de categorías
+  FunctionCategorias:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/categorias/
+      Handler: categorias.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+
+      Environment:
+        Variables:
+          TABLA_CATEGORIAS: !Ref CategoriasTable
+
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt CategoriasTable.Arn
+
+      Events:
+        ObtenerCategorias:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /categorias
+            Method: GET
+
+        RegistrarCategoria:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /categorias
+            Method: POST
+
+        EliminarCategoria:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiTodoChatbot
+            Path: /categorias/{id_categoria}
+            Method: DELETE
 
 
 Outputs:

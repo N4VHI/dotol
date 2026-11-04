@@ -3,14 +3,25 @@ import os
 import re
 
 from datetime import datetime, date, timezone
+from zoneinfo import ZoneInfo
 
 import boto3
+from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 
-# Cliente DynamoDB reutilizable
+# 1. Configuración
 dynamodb = boto3.resource("dynamodb")
-tabla = dynamodb.Table(os.environ["TABLA_TAREAS"])
+cliente = boto3.client("dynamodb")
+
+TABLA_TAREAS = os.environ["TABLA_TAREAS"]
+TABLA_CATEGORIAS = os.environ["TABLA_CATEGORIAS"]
+
+tabla_tareas = dynamodb.Table(TABLA_TAREAS)
+tabla_categorias = dynamodb.Table(TABLA_CATEGORIAS)
+
+serializador = TypeSerializer()
+ZONA = ZoneInfo("America/Lima")
 
 
 def responder(status, datos):
@@ -21,18 +32,31 @@ def responder(status, datos):
     }
 
 
-def validar_fecha_hacer(fecha):
+def serializar_item(item):
+    return {clave: serializador.serialize(valor) for clave, valor in item.items()}
+
+
+# 2. Validaciones de fechas
+def validar_fecha_hacer(fecha, ahora_utc):
     if not isinstance(fecha, str):
-        return False
+        return None
 
     try:
         fecha_obj = datetime.fromisoformat(fecha)
-        return fecha_obj.utcoffset() is not None
+
+        if fecha_obj.utcoffset() is None:
+            return None
+
+        if fecha_obj <= ahora_utc:
+            return None
+
+        return fecha_obj
+
     except ValueError:
-        return False
+        return None
 
 
-def validar_fecha_dia(fecha):
+def validar_fecha_dia(fecha, hoy_local):
     if not isinstance(fecha, str):
         return False
 
@@ -41,25 +65,36 @@ def validar_fecha_dia(fecha):
 
     try:
         fecha_obj = date.fromisoformat(fecha)
-        return fecha_obj.isoformat() == fecha
+        return fecha_obj >= hoy_local
     except ValueError:
         return False
 
 
+# 3. Consultar categoría del usuario
+def obtener_categoria(user_id, id_categoria):
+    resultado = tabla_categorias.get_item(
+        Key={"id_usuario": user_id, "id_categoria": id_categoria}, ConsistentRead=True
+    )
+
+    return resultado.get("Item")
+
+
 def lambda_handler(event, context):
     try:
-        # 1. Obtener usuario autenticado
+        # 4. Obtener usuario autenticado
         claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
         user_id = claims["sub"]
 
-        # 2. Obtener identificador de la tarea
+        # 5. Obtener ID de la tarea
         parametros = event.get("pathParameters") or {}
         id_tarea = parametros.get("id_tarea")
 
         if not id_tarea:
             return responder(400, {"error": "El ID de la tarea es obligatorio"})
 
-        # 3. Leer JSON
+        clave_tarea = {"id_usuario": user_id, "id_tarea": id_tarea}
+
+        # 6. Leer JSON
         try:
             datos = json.loads(event.get("body") or "{}")
         except (json.JSONDecodeError, TypeError):
@@ -68,11 +103,11 @@ def lambda_handler(event, context):
         if not isinstance(datos, dict):
             return responder(400, {"error": "Se esperaba un objeto JSON"})
 
-        # 4. Validar campos permitidos
+        # 7. Validar campos permitidos
         campos_permitidos = {
             "nombre",
             "descripcion",
-            "categoria",
+            "id_categoria",
             "fecha_hacer",
             "fecha_dia",
         }
@@ -88,7 +123,7 @@ def lambda_handler(event, context):
                 {"error": "Campos no permitidos", "campos": sorted(campos_invalidos)},
             )
 
-        # 5. Validar nombre
+        # 8. Validar nombre
         if "nombre" in datos:
             nombre = datos["nombre"]
 
@@ -102,7 +137,7 @@ def lambda_handler(event, context):
 
             datos["nombre"] = nombre
 
-        # 6. Validar descripción
+        # 9. Validar descripción
         if "descripcion" in datos:
             descripcion = datos["descripcion"]
 
@@ -117,57 +152,85 @@ def lambda_handler(event, context):
 
                 datos["descripcion"] = descripcion.strip()
 
-        # 7. Validar categoría
-        if "categoria" in datos:
-            categoria = datos["categoria"]
+        # 10. Validar categoría
+        categoria = None
+        id_categoria = datos.get("id_categoria")
 
-            # Ajustar según las categorías oficiales de dotol
-            categorias_validas = {"academica", "personal", "otra"}
+        if "id_categoria" in datos:
+            if id_categoria is None:
+                # Eliminar relación y nombre de categoría
+                datos["categoria"] = None
 
-            if categoria is not None and (
-                not isinstance(categoria, str) or categoria not in categorias_validas
-            ):
-                return responder(400, {"error": "Categoría no permitida"})
+            else:
+                if not isinstance(id_categoria, str) or not re.fullmatch(
+                    r"[0-9A-HJKMNP-TV-Z]{26}", id_categoria
+                ):
+                    return responder(400, {"error": "ID de categoría inválido"})
 
-        # 8. Validar y sincronizar fechas
+                categoria = obtener_categoria(user_id, id_categoria)
 
-        # Evitar dos fuentes de fecha en una solicitud
+                if not categoria:
+                    return responder(
+                        404, {"error": ("Categoría no encontrada para este usuario")}
+                    )
+
+                # Guardar nombre real del catálogo
+                datos["categoria"] = categoria["nombre"]
+
+        # 11. Obtener fecha actual
+        ahora_utc = datetime.now(timezone.utc)
+        hoy_local = ahora_utc.astimezone(ZONA).date()
+
+        # 12. Evitar dos tipos de fecha simultáneos
         if "fecha_hacer" in datos and "fecha_dia" in datos:
             return responder(
                 400, {"error": ("Envía fecha_hacer o fecha_dia, pero no ambos")}
             )
 
+        # 13. Validar y sincronizar fechas
         if "fecha_hacer" in datos:
             fecha_hacer = datos["fecha_hacer"]
 
             if fecha_hacer is None:
-                # El usuario quita la fecha y hora
                 datos["fecha_dia"] = None
 
             else:
-                if not validar_fecha_hacer(fecha_hacer):
+                fecha_obj = validar_fecha_hacer(fecha_hacer, ahora_utc)
+
+                if fecha_obj is None:
                     return responder(
                         400,
-                        {"error": ("fecha_hacer debe ser ISO 8601 con hora y offset")},
+                        {
+                            "error": (
+                                "fecha_hacer debe ser ISO 8601 "
+                                "con offset y posterior al "
+                                "momento actual"
+                            )
+                        },
                     )
 
-                fecha_obj = datetime.fromisoformat(fecha_hacer)
-
-                # Sincronizar fecha calendario
-                datos["fecha_dia"] = fecha_obj.date().isoformat()
+                datos["fecha_dia"] = fecha_obj.astimezone(ZONA).date().isoformat()
 
         elif "fecha_dia" in datos:
             fecha_dia = datos["fecha_dia"]
 
             if fecha_dia is not None:
-                if not validar_fecha_dia(fecha_dia):
-                    return responder(400, {"error": ("fecha_dia debe usar YYYY-MM-DD")})
+                if not validar_fecha_dia(fecha_dia, hoy_local):
+                    return responder(
+                        400,
+                        {
+                            "error": (
+                                "fecha_dia debe ser YYYY-MM-DD "
+                                "e igual o posterior a hoy"
+                            )
+                        },
+                    )
 
-            # El usuario eligió un día sin hora,
-            # o decidió eliminar la fecha.
+            # Si se cambia solo el día,
+            # se elimina la hora anterior.
             datos["fecha_hacer"] = None
 
-        # 9. Construir expresión DynamoDB
+        # 14. Construir expresión de actualización
         expresiones_set = []
         expresiones_remove = []
         nombres = {}
@@ -178,7 +241,6 @@ def lambda_handler(event, context):
             nombres[nombre_alias] = campo
 
             if valor is None:
-                # Eliminar atributo opcional
                 expresiones_remove.append(nombre_alias)
 
             else:
@@ -187,7 +249,7 @@ def lambda_handler(event, context):
 
                 expresiones_set.append(f"{nombre_alias} = {valor_alias}")
 
-        # 10. Fecha de modificación automática
+        # 15. Actualizar fecha de modificación
         ahora = datetime.now(timezone.utc).isoformat()
 
         nombres["#fecha_modificacion"] = "fecha_modificacion"
@@ -200,40 +262,86 @@ def lambda_handler(event, context):
         if expresiones_remove:
             expresion += " REMOVE " + ", ".join(expresiones_remove)
 
-        # 11. Actualizar DynamoDB
-        resultado = tabla.update_item(
-            Key={"id_usuario": user_id, "id_tarea": id_tarea},
-            UpdateExpression=expresion,
-            ConditionExpression=(
-                "attribute_exists(id_usuario) "
-                "AND attribute_exists(id_tarea) "
-                "AND #estado <> :eliminada"
-            ),
-            ExpressionAttributeNames={**nombres, "#estado": "estado"},
-            ExpressionAttributeValues={**valores, ":eliminada": "eliminada"},
-            ReturnValues="ALL_NEW",
-        )
+        # 16. Actualización de la tarea
+        operacion_tarea = {
+            "Update": {
+                "TableName": TABLA_TAREAS,
+                "Key": serializar_item(clave_tarea),
+                "UpdateExpression": expresion,
+                "ConditionExpression": (
+                    "attribute_exists(id_usuario) "
+                    "AND attribute_exists(id_tarea) "
+                    "AND #estado <> :eliminada"
+                ),
+                "ExpressionAttributeNames": {**nombres, "#estado": "estado"},
+                "ExpressionAttributeValues": {
+                    **serializar_item(valores),
+                    ":eliminada": {"S": "eliminada"},
+                },
+            }
+        }
 
-        # 12. Responder con tarea actualizada
+        operaciones = [operacion_tarea]
+
+        # 17. Comprobar existencia de nueva categoría
+        if categoria is not None:
+            operaciones.append(
+                {
+                    "ConditionCheck": {
+                        "TableName": TABLA_CATEGORIAS,
+                        "Key": serializar_item(
+                            {"id_usuario": user_id, "id_categoria": id_categoria}
+                        ),
+                        "ConditionExpression": (
+                            "attribute_exists(id_usuario) AND #nombre = :nombre"
+                        ),
+                        "ExpressionAttributeNames": {"#nombre": "nombre"},
+                        "ExpressionAttributeValues": {
+                            ":nombre": {"S": categoria["nombre"]}
+                        },
+                    }
+                }
+            )
+
+        # 18. Ejecutar actualización atómica
+        cliente.transact_write_items(TransactItems=operaciones)
+
+        # 19. Obtener tarea actualizada
+        resultado = tabla_tareas.get_item(Key=clave_tarea, ConsistentRead=True)
+
+        tarea_actualizada = resultado.get("Item")
+
         return responder(
             200,
-            {
-                "mensaje": "Tarea actualizada correctamente",
-                "tarea": resultado["Attributes"],
-            },
+            {"mensaje": "Tarea actualizada correctamente", "tarea": tarea_actualizada},
         )
 
     except ClientError as e:
         codigo = e.response["Error"]["Code"]
 
-        if codigo == "ConditionalCheckFailedException":
-            return responder(404, {"error": "Tarea no encontrada o eliminada"})
+        if codigo == "TransactionCanceledException":
+            razones = e.response.get("CancellationReasons", [])
+
+            if any(razon.get("Code") == "ConditionalCheckFailed" for razon in razones):
+                return responder(
+                    409,
+                    {
+                        "error": (
+                            "La tarea o categoría ya no está "
+                            "disponible para esta operación"
+                        )
+                    },
+                )
+
+            print(f"Transacción cancelada: {razones}")
+
+            return responder(503, {"error": "No se pudo completar la actualización"})
 
         print(f"Error DynamoDB: {codigo}")
 
         return responder(500, {"error": "No se pudo actualizar la tarea"})
 
     except Exception as e:
-        print(f"Error inesperado: {str(e)}")
+        print(f"Error inesperado: {type(e).__name__}: {str(e)}")
 
         return responder(500, {"error": "Error interno del servidor"})
