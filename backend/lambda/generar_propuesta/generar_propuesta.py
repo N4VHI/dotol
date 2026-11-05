@@ -21,7 +21,7 @@ MODELO = os.environ["BEDROCK_MODEL_ID"]
 ZONA = ZoneInfo(os.environ.get("ZONA_HORARIA", "America/Lima"))
 
 MAX_ACCIONES = 6
-MAX_TAREAS_CONTEXTO = 100
+MAX_TAREAS_CONTEXTO = 20
 META_CATEGORIAS = "__META__"
 PATRON_ULID = re.compile(r"[0-9A-HJKMNP-TV-Z]{26}")
 PATRON_DIA = re.compile(r"\d{4}-\d{2}-\d{2}")
