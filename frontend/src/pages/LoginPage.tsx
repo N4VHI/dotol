@@ -5,10 +5,11 @@ import { useNavigate } from "react-router";
 
 import AuthLayout from "../components/auth/auth-hero";
 import { iniciarSesion, mensajeErrorCognito } from "../services/auth";
+import type { TokensCognito } from "../services/sesion";
 import "../styles/login.css";
 
 type LoginPageProps = {
-  onIniciarSesion: (accessToken: string, expiresIn: number) => void;
+  onIniciarSesion: (tokens: TokensCognito) => void;
 };
 
 export default function LoginPage({ onIniciarSesion }: LoginPageProps) {
@@ -28,7 +29,7 @@ export default function LoginPage({ onIniciarSesion }: LoginPageProps) {
 
     try {
       const resultado = await iniciarSesion(correo, contrasena);
-      onIniciarSesion(resultado.accessToken, resultado.expiresIn);
+      onIniciarSesion(resultado);
       setContrasena("");
       navigate("/inicio", { replace: true });
     } catch (errorDesconocido) {

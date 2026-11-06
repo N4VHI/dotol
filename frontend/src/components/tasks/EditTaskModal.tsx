@@ -47,10 +47,21 @@ export default function EditTaskModal({ accessToken, tarea, categorias, onCerrar
 
   useEffect(() => {
     nombreRef.current?.focus();
-    const alTeclado = (e: KeyboardEvent) => { if (e.key === "Escape" && !enviando) onCerrar(); };
-    window.addEventListener("keydown", alTeclado);
-    return () => window.removeEventListener("keydown", alTeclado);
-  }, [enviando, onCerrar]);
+  }, []);
+
+  useEffect(() => {
+    function alPresionarTecla(evento: KeyboardEvent) {
+      if (evento.key === "Escape" && !enviando) {
+        onCerrar();
+      }
+    }
+
+    window.addEventListener("keydown", alPresionarTecla);
+
+    return () => {
+      window.removeEventListener("keydown", alPresionarTecla);
+    };
+  }, [onCerrar, enviando]);
 
   async function guardar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

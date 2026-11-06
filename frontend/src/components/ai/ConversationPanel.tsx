@@ -23,8 +23,15 @@ export default function ConversationPanel({ mensajes, nombre, enviando, bloquead
     evento.preventDefault();
     const texto = borrador.trim();
     if (!texto || enviando || bloqueado) return;
-    const enviado = await onEnviar(texto);
-    if (enviado) setBorrador("");
+    // Vaciar el cuadro inmediatamente, aunque AWS todavia este procesando.
+    setBorrador("");
+    try {
+      const enviado = await onEnviar(texto);
+      if (!enviado) setBorrador(texto);
+    } catch {
+      // Si falla, la persona puede corregir o reintentar el mensaje.
+      setBorrador(texto);
+    }
   }
 
   function controlarEnter(evento: KeyboardEvent<HTMLTextAreaElement>) {
@@ -70,7 +77,7 @@ export default function ConversationPanel({ mensajes, nombre, enviando, bloquead
         {enviando && (
           <div className="dt-ai-chat__bubble dt-ai-chat__bubble--bot" role="status">
             <span className="dt-ai-chat__sender">DOTOL</span>
-            <p className="dt-ai-chat__thinking">Preparando la propuesta…</p>
+            <p className="dt-ai-chat__thinking">Dotol está pensando…</p>
           </div>
         )}
         <div ref={finRef} />

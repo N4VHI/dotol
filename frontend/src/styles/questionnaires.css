@@ -1,0 +1,374 @@
+/* DOTOL · Cuestionarios SUS y Raw NASA-TLX.
+   Estilos aislados: no alteran Método IA, Tradicional, login ni registro. */
+
+/* El diseño de Figma muestra los cuestionarios sin la barra superior. */
+.dt-workspace:has(.dt-questionnaire) > .dt-topbar {
+  display: none;
+}
+
+.dt-questionnaire {
+  background: #f8f7f3;
+  color: #292f28;
+  min-height: 100dvh;
+  padding: 28px clamp(25px, 5.5vw, 78px) 38px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.dt-questionnaire__content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dt-questionnaire__eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 20px;
+}
+
+.dt-questionnaire__eyebrow {
+  color: #42634b;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.dt-questionnaire__estimate {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #697065;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dt-questionnaire__header { margin: 16px 0 16px; }
+
+.dt-questionnaire__header h1 {
+  font-size: clamp(26px, 2.7vw, 36px);
+  font-weight: 600;
+  letter-spacing: -.038em;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  color: #292f28;
+}
+
+.dt-questionnaire__header p {
+  margin: 0;
+  color: #697065;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.dt-questionnaire__header .dt-questionnaire__note {
+  color: #91978c;
+  font-size: 12px;
+  margin-top: 7px;
+}
+
+.dt-questionnaire__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.dt-questionnaire__column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 12px;
+}
+
+/* SUS: cinco preguntas a la izquierda y cinco a la derecha. */
+.dt-survey-sus-card {
+  min-width: 0;
+  min-height: 128px;
+  padding: 15px 15px 11px;
+  margin: 0;
+  border: 1px solid #e1e4db;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.dt-survey-sus-card__legend {
+  float: left;
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 13px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #292f28;
+}
+
+.dt-survey-sus-card__legend::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+.dt-survey-sus-card__number {
+  color: #91978c;
+  font-size: 12px;
+  font-weight: 600;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-survey-sus-card__choices {
+  clear: both;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.dt-survey-sus-choice {
+  display: block;
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.dt-survey-sus-choice input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.dt-survey-sus-choice span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 41px;
+  border: 1px solid #e1e4db;
+  border-radius: 10px;
+  background: #f8f7f3;
+  color: #697065;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.dt-survey-sus-choice:hover input:not(:disabled) + span {
+  border-color: #9aaf9b;
+}
+
+.dt-survey-sus-choice input:checked + span {
+  background: #42634b;
+  border-color: #42634b;
+  color: #fff;
+  font-weight: 700;
+}
+
+.dt-survey-sus-choice input:focus-visible + span {
+  outline: 3px solid #9eb9a5;
+  outline-offset: 2px;
+}
+
+.dt-survey-sus-choice input:disabled { cursor: not-allowed; }
+
+.dt-survey-sus-card__anchors {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: #858c80;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.dt-survey-sus-card__anchors span:last-child { text-align: right; }
+
+/* Raw NASA-TLX: tres dimensiones por columna. */
+.dt-questionnaire--tlx .dt-questionnaire__header { margin: 29px 0 23px; }
+.dt-questionnaire--tlx .dt-questionnaire__columns { gap: 30px; }
+.dt-questionnaire--tlx .dt-questionnaire__column { gap: 13px; }
+
+.dt-survey-tlx-card {
+  min-width: 0;
+  min-height: 145px;
+  padding: 17px 16px 14px;
+  border: 1px solid #e1e4db;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.dt-survey-tlx-card__title {
+  display: flex;
+  gap: 11px;
+  align-items: baseline;
+  color: #292f28;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 15px;
+  cursor: pointer;
+}
+
+.dt-survey-tlx-card__number {
+  color: #91978c;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-survey-tlx-card__slider {
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  display: block;
+  border: 0;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(to right, #42634b 0 var(--dt-survey-fill), #e0e3d9 var(--dt-survey-fill) 100%);
+}
+
+.dt-survey-tlx-card__slider::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #fff;
+  box-shadow: 0 1px 6px #292f2860;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.dt-survey-tlx-card__slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #fff;
+  box-shadow: 0 1px 6px #292f2860;
+}
+
+.dt-survey-tlx-card__slider:focus-visible {
+  outline: 3px solid #a3bca9;
+  outline-offset: 5px;
+}
+
+.dt-survey-tlx-card__slider:disabled { opacity: .65; cursor: not-allowed; }
+
+.dt-survey-tlx-card__value {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 23px;
+  margin-top: 9px;
+  color: #42634b;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-survey-tlx-card__unanswered {
+  font-size: 11px;
+  font-weight: 400;
+  color: #91978c;
+}
+
+.dt-survey-tlx-card__anchors {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  color: #858c80;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.dt-survey-tlx-card__anchors span:last-child { text-align: right; }
+
+/* Pedido explícito: alto/bajo en ESFUERZO deben verse más claros y en negrita. */
+.dt-survey-tlx-card--effort .dt-survey-tlx-card__anchors {
+  color: #292f28;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.dt-survey-tlx-card__hint {
+  margin: 5px 0 0;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #697065;
+}
+
+/* Pie común */
+.dt-questionnaire__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 26px;
+}
+
+.dt-questionnaire__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #42634b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dt-questionnaire__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-width: 225px;
+  height: 53px;
+  padding: 0 22px;
+  color: #fff;
+  background: #42634b;
+  border: 1px solid #42634b;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+
+.dt-questionnaire__submit:hover:not(:disabled) { background: #354f3d; }
+.dt-questionnaire__submit:focus-visible { outline: 3px solid #9eb9a5; outline-offset: 3px; }
+.dt-questionnaire__submit:disabled { opacity: .48; cursor: not-allowed; }
+
+@media (max-width: 1130px) {
+  .dt-questionnaire__columns { gap: 16px; }
+  .dt-questionnaire { padding-inline: 25px; }
+  .dt-survey-sus-card { padding: 13px 12px 11px; }
+  .dt-survey-sus-card__choices { gap: 6px; }
+  .dt-survey-sus-card__anchors { font-size: 9px; }
+}
+
+@media (max-width: 850px) {
+  .dt-questionnaire__columns { grid-template-columns: 1fr; }
+  .dt-questionnaire__header h1 { font-size: 28px; }
+  .dt-questionnaire--tlx .dt-questionnaire__columns { gap: 13px; }
+  .dt-questionnaire--tlx .dt-questionnaire__header { margin-top: 16px; }
+  .dt-questionnaire { padding: 22px 21px 40px; }
+}
+
+@media (max-width: 480px) {
+  .dt-questionnaire__header h1 { font-size: 24px; }
+  .dt-questionnaire__header p { font-size: 12px; }
+  .dt-questionnaire__footer { align-items: stretch; }
+  .dt-questionnaire__submit { width: 100%; }
+  .dt-survey-sus-card__anchors { font-size: 9px; }
+}

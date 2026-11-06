@@ -27,11 +27,20 @@ export default function CreateTaskModal({ accessToken, categorias, onCerrar, onC
 
   useEffect(() => {
     nombreRef.current?.focus();
-    function escucharTeclado(evento: KeyboardEvent) {
-      if (evento.key === "Escape" && !enviando) onCerrar();
+  }, []);
+
+  useEffect(() => {
+    function alPresionarTecla(evento: KeyboardEvent) {
+      if (evento.key === "Escape" && !enviando) {
+        onCerrar();
+      }
     }
-    window.addEventListener("keydown", escucharTeclado);
-    return () => window.removeEventListener("keydown", escucharTeclado);
+
+    window.addEventListener("keydown", alPresionarTecla);
+
+    return () => {
+      window.removeEventListener("keydown", alPresionarTecla);
+    };
   }, [onCerrar, enviando]);
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {

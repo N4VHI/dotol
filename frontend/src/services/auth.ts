@@ -7,10 +7,13 @@ import {
 import {
   SignUpCommand,
   InitiateAuthCommand,
+  GetTokensFromRefreshTokenCommand,
+  RevokeTokenCommand,
   type AttributeType,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 import { cognito, CLIENT_ID } from "../config/cognito";
+import type { Sesion, TokensCognito } from "./sesion";
 
 export type DatosRegistro = {
   nombres: string;
@@ -100,10 +103,17 @@ export async function iniciarSesion(correo: string, contrasena: string) {
     throw new Error("Cognito no devolvió un token de acceso.");
   }
 
+  const refreshToken = respuesta.AuthenticationResult?.RefreshToken;
+  if (!refreshToken) {
+    throw new Error("Cognito no devolvió un refresh token para esta sesión.");
+  }
+
   return {
     accessToken,
+    refreshToken,
     expiresIn: respuesta.AuthenticationResult?.ExpiresIn ?? 3600,
-  };
+    deviceKey: respuesta.AuthenticationResult?.NewDeviceMetadata?.DeviceKey,
+  } satisfies TokensCognito;
 }
 
 // Mensajes de error
@@ -133,4 +143,49 @@ export function mensajeErrorCognito(error: unknown): string {
     default:
       return "Ocurrió un error. Inténtalo nuevamente.";
   }
+}
+
+/**
+ * Renovación compatible con clientes Cognito con o sin rotación del refresh token.
+ * Compartimos las peticiones en curso para evitar dos rotaciones simultáneas en
+ * React.StrictMode. El token de reemplazo puede cambiar tras cada renovación.
+ */
+let renovacionEnCurso: { token: string; promesa: Promise<TokensCognito> } | null = null;
+
+export function renovarTokens(sesion: Sesion): Promise<TokensCognito> {
+  if (renovacionEnCurso?.token === sesion.refreshToken) {
+    return renovacionEnCurso.promesa;
+  }
+
+  const promesa = cognito.send(new GetTokensFromRefreshTokenCommand({
+    ClientId: CLIENT_ID,
+    RefreshToken: sesion.refreshToken,
+    ...(sesion.deviceKey ? { DeviceKey: sesion.deviceKey } : {}),
+  })).then((respuesta): TokensCognito => {
+    const accessToken = respuesta.AuthenticationResult?.AccessToken;
+    if (!accessToken) {
+      throw new Error("Cognito no devolvió un access token al renovar.");
+    }
+    return {
+      accessToken,
+      refreshToken: respuesta.AuthenticationResult?.RefreshToken || sesion.refreshToken,
+      expiresIn: respuesta.AuthenticationResult?.ExpiresIn ?? 3600,
+      deviceKey: respuesta.AuthenticationResult?.NewDeviceMetadata?.DeviceKey || sesion.deviceKey,
+    };
+  });
+
+  renovacionEnCurso = { token: sesion.refreshToken, promesa };
+  void promesa.then(
+    () => { if (renovacionEnCurso?.promesa === promesa) renovacionEnCurso = null; },
+    () => { if (renovacionEnCurso?.promesa === promesa) renovacionEnCurso = null; },
+  );
+  return promesa;
+}
+
+/** Revoca el refresh token actual en Cognito al cerrar sesión. */
+export async function revocarRefreshToken(refreshToken: string): Promise<void> {
+  await cognito.send(new RevokeTokenCommand({
+    ClientId: CLIENT_ID,
+    Token: refreshToken,
+  }));
 }

@@ -1,0 +1,112 @@
+
+/* Grupos de tareas objetivo del experimento */
+.dt-prep .dt-eval-lead { max-width: 790px; }
+.dt-prep-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; margin-top: 26px; }
+.dt-prep-group { min-width: 0; background: #f8f7f3; border: 1px solid #e3e5dc; border-radius: 14px; padding: 16px; }
+.dt-prep-group__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid #e3e5dc; }
+.dt-prep-group__head strong { color: #292f28; font-size: 17px; }
+.dt-prep-group__head p { color: #697065; font-size: 12px; margin: 5px 0 0; }
+.dt-prep-add { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #42634b; background: #fff; color: #42634b; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.dt-prep-add:disabled { opacity: .55; cursor: not-allowed; }
+.dt-prep-group__tasks { display: grid; gap: 12px; margin-top: 14px; }
+.dt-prep-task { margin: 0; min-width: 0; border: 1px solid #e3e5dc; border-radius: 12px; padding: 12px; background: #fff; }
+.dt-prep-task legend { padding: 0 6px; color: #42634b; font-size: 12px; font-weight: 650; }
+.dt-prep-task__head { display: flex; justify-content: space-between; align-items: flex-start; color: #8a9085; font-size: 10px; gap: 9px; margin: -3px 0 12px; }
+.dt-prep-task__head button { border: none; background: transparent; color: #697065; cursor: pointer; padding: 2px; }
+.dt-prep-task__head button:disabled { opacity: .3; cursor: not-allowed; }
+.dt-prep-task label { display: grid; gap: 6px; color: #292f28; font-size: 12px; font-weight: 550; margin-bottom: 11px; }
+.dt-prep-task input, .dt-prep-task textarea { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #d5dccf; border-radius: 8px; background: #fff; color: #292f28; font: inherit; font-weight: 400; outline: 0; }
+.dt-prep-task input:focus, .dt-prep-task textarea:focus { border-color: #42634b; box-shadow: 0 0 0 3px #e8eee3; }
+.dt-prep-notice { display: flex; align-items: flex-start; gap: 12px; margin-top: 20px; padding: 15px; background: #e8eee3; color: #42634b; border-radius: 12px; }
+.dt-prep-notice svg { flex: none; }
+.dt-prep-notice p { margin: 0; color: #485046; font-size: 13px; line-height: 1.6; }
+.dt-eval-brief { border: 1px solid #dbe3d5; border-radius: 12px; background: #f6f8f3; padding: 10px 14px; margin: 15px 0; }
+.dt-eval-brief__toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; border: 0; padding: 3px 0; background: transparent; color: #42634b; cursor: pointer; font-size: 13px; font-weight: 600; text-align: left; }
+.dt-eval-brief__toggle > span { display: flex; align-items: center; gap: 7px; }
+.dt-eval-brief__tasks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; padding: 12px 0 0 22px; margin: 0; }
+.dt-eval-brief__tasks li { padding-right: 6px; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.dt-eval-brief__tasks strong { color: #292f28; font-size: 13px; }
+.dt-eval-brief__tasks p { margin: 4px 0; color: #697065; }
+.dt-eval-brief__date { display: inline-flex; align-items: center; gap: 4px; color: #42634b; font-size: 11px; margin-top: 3px; }
+.dt-eval-brief--compact { background: #eef3ea; margin: 0 0 16px; }
+.dt-ai-page__evaluation .dt-eval-brief { margin: 0 0 10px; }
+@media (max-width: 900px) { .dt-prep-grid, .dt-eval-brief__tasks { grid-template-columns: 1fr; } }
+
+/* =======================================================================
+   CORRECCIÓN: Método IA durante la evaluación.
+   El componente tiene tres hijos directos:
+   1) barra + tareas objetivo, 2) chat, 3) propuestas.
+   Sin áreas explícitas, CSS Grid distribuye chat y propuestas en filas
+   incorrectas cuando faltan estilos de evaluación-extra.css.
+   Estas reglas son suficientes aunque evaluation-extra.css no se importe.
+   ======================================================================= */
+
+@media (min-width: 961px) {
+  .dt-ai-page.dt-ai-page--evaluation {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(355px, 5fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "evaluation evaluation"
+      "conversation proposals";
+    height: calc(100dvh - 76px);
+    min-height: 500px;
+    overflow: hidden;
+  }
+
+  .dt-ai-page--evaluation > .dt-ai-page__evaluation {
+    grid-area: evaluation;
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding: 12px 20px 0;
+    background: #f8f7f3;
+  }
+
+  .dt-ai-page--evaluation > .dt-ai-page__conversation {
+    grid-area: conversation;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .dt-ai-page--evaluation > .dt-ai-proposals {
+    grid-area: proposals;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+.dt-ai-page--evaluation .dt-ai-page__evaluation .dt-eval-bar {
+  margin-bottom: 12px;
+}
+
+.dt-ai-page--evaluation .dt-ai-page__evaluation .dt-eval-brief {
+  margin: 0 0 12px;
+}
+
+/* En tablets y móviles se mantiene la disposición vertical del CSS de IA. */
+@media (max-width: 960px) {
+  .dt-ai-page.dt-ai-page--evaluation {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100dvh - 76px);
+    overflow: visible;
+  }
+
+  .dt-ai-page--evaluation > .dt-ai-page__evaluation {
+    width: 100%;
+    min-width: 0;
+    padding: 12px 16px 0;
+    background: #f8f7f3;
+  }
+
+  .dt-ai-page--evaluation > .dt-ai-page__conversation {
+    min-height: 510px;
+  }
+
+  .dt-ai-page--evaluation > .dt-ai-proposals {
+    min-height: 400px;
+  }
+}

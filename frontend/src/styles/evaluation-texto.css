@@ -1,0 +1,44 @@
+/* Textos libres de grupos. Mantiene el estilo de dotol sin alterar el grid del chatbot. */
+.dt-prep-free-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e3e5dc;
+  border-radius: 14px;
+  background: #f8f7f3;
+}
+.dt-prep-free-group__heading { font-size: 17px; font-weight: 650; color: #292f28; }
+.dt-prep-free-group__subtitle { color: #697065; font-size: 12px; line-height: 1.5; min-height: 34px; }
+.dt-prep-free-group textarea {
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid #c9d1c1;
+  border-radius: 11px;
+  background: #fff;
+  color: #292f28;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  outline: none;
+}
+.dt-prep-free-group textarea:focus { border-color: #42634b; box-shadow: 0 0 0 3px #e8eee3; }
+.dt-prep-free-group textarea::placeholder { color: #8a9085; }
+.dt-prep-free-group__hint { font-size: 11px; color: #8a9085; text-align: right; }
+.dt-eval-brief__text {
+  margin: 10px 0 2px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #292f28;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .dt-prep-grid--texto { grid-template-columns: 1fr; }
+}
