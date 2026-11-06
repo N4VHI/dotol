@@ -87,8 +87,14 @@ def validar_acciones(acciones):
             if id_tarea in ids_usados:
                 raise ValueError("Hay dos acciones sobre la misma tarea")
             ids_usados.add(id_tarea)
-            if id_categoria is not None:
-                raise ValueError("Solo create puede definir una categoría")
+            if op == "update":
+                if id_categoria is not None and (
+                    not isinstance(id_categoria, str)
+                    or not PATRON_ULID.fullmatch(id_categoria)
+                ):
+                    raise ValueError("ID de categoría inválido en update")
+            elif id_categoria is not None:
+                raise ValueError("Complete y delete requieren category_id=null")
 
         if op in {"create", "update"}:
             if not isinstance(titulo, str) or not 1 <= len(titulo.strip()) <= 100:
@@ -114,7 +120,7 @@ def cargar_categorias(user_id, acciones):
     ids_categorias = {
         accion["category_id"]
         for accion in acciones
-        if accion["op"] == "create" and accion["category_id"] is not None
+        if accion["op"] in {"create", "update"} and accion["category_id"] is not None
     }
     categorias_por_id = {}
 
@@ -260,7 +266,17 @@ def lambda_handler(event, context):
                 valores[":nombre"] = accion["title"].strip()
                 cambios.append("#nombre = :nombre")
 
-                # Mantener fecha_hacer si solo cambia el título o el día no cambia.
+                # Cambiar categoría únicamente cuando el agente devuelve un ID real.
+                # Null en update conserva la categoría anterior (no la elimina).
+                id_categoria_nueva = accion["category_id"]
+                if id_categoria_nueva is not None:
+                    nombres["#id_cat"] = "id_categoria"
+                    nombres["#cat"] = "categoria"
+                    valores[":id_cat"] = id_categoria_nueva
+                    valores[":cat"] = categorias_por_id[id_categoria_nueva]["nombre"]
+                    cambios.extend(["#id_cat = :id_cat", "#cat = :cat"])
+
+                # Mantener fecha_hacer si solo cambia título/categoría o el día no cambia.
                 if due != dia_de_tarea(existente):
                     nombres["#dia"] = "fecha_dia"
                     nombres["#hacer"] = "fecha_hacer"

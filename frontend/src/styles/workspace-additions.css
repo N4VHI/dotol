@@ -1,0 +1,9 @@
+/* Controles de editar y eliminar, solo en Método Tradicional. */
+.dt-task__actions { display:flex; align-items:center; flex:none; gap:4px; margin-left:5px; }
+.dt-task__icon-btn { width:29px; height:29px; display:grid; place-items:center; flex:none;
+  border:1px solid transparent; border-radius:7px; background:transparent; color:#697065; cursor:pointer; }
+.dt-task__icon-btn:hover:not(:disabled), .dt-task__icon-btn:focus-visible { background:#e8eee3; color:#42634b; }
+.dt-task__icon-btn--danger:hover:not(:disabled), .dt-task__icon-btn--danger:focus-visible { background:#ffebeb; color:#a13b3b; }
+.dt-task__icon-btn:disabled { cursor:not-allowed; opacity:.45; }
+@media (max-width: 460px) { .dt-task__actions { flex-direction:column; gap:0; margin-left:0; }
+  .dt-task__icon-btn { width:26px; height:25px; } }

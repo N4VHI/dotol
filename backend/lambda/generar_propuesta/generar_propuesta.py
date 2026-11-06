@@ -21,7 +21,7 @@ MODELO = os.environ["BEDROCK_MODEL_ID"]
 ZONA = ZoneInfo(os.environ.get("ZONA_HORARIA", "America/Lima"))
 
 MAX_ACCIONES = 6
-MAX_TAREAS_CONTEXTO = 20
+MAX_TAREAS_CONTEXTO = 100
 META_CATEGORIAS = "__META__"
 PATRON_ULID = re.compile(r"[0-9A-HJKMNP-TV-Z]{26}")
 PATRON_DIA = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -246,8 +246,18 @@ def validar_acciones(salida, tareas_abiertas, categorias, hoy):
             if id_tarea in ids_utilizados:
                 raise ValueError("Acciones duplicadas sobre una tarea")
             ids_utilizados.add(id_tarea)
-            if id_categoria is not None:
-                raise ValueError("Solo create puede elegir una categoría")
+            # La actualización puede proponer un cambio de categoría real.
+            # category_id=None conserva la categoría que ya tiene la tarea.
+            if op == "update":
+                if id_categoria is not None and (
+                    not isinstance(id_categoria, str)
+                    or id_categoria not in categorias_por_id
+                ):
+                    raise ValueError(
+                        "Update requiere un ID de categoría existente o null"
+                    )
+            elif id_categoria is not None:
+                raise ValueError("Complete y delete requieren category_id=null")
 
         if op in {"create", "update"}:
             if not isinstance(titulo, str) or not titulo.strip():

@@ -1,0 +1,33 @@
+/* Estilos exclusivos del inicio de sesión; no cambian el registro. */
+.auth-login {
+  width: min(100%, 400px);
+}
+
+.auth-login .auth-intro {
+  margin-bottom: 24px;
+}
+
+.auth-login .auth-form {
+  gap: 24px;
+}
+
+.auth-login .auth-field {
+  gap: 9px;
+}
+
+.auth-login .auth-field > input,
+.auth-login .auth-field__password input {
+  height: 52px;
+}
+
+.auth-login .auth-field__eye {
+  height: 52px;
+}
+
+.auth-login .auth-submit {
+  min-height: 52px;
+}
+
+@media (max-width: 480px) {
+  .auth-login .auth-form { gap: 20px; }
+}
