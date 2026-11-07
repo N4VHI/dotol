@@ -206,11 +206,31 @@ export default function RegisterPage() {
               </div>
               
 
-              {/* Figma incluye este checkbox. No se obliga a aceptar hasta publicar
-                  los documentos reales de términos y privacidad. */}
+              {/* Términos y privacidad para la evaluación académica. */}
+              <details style={{ fontSize: "0.7rem", lineHeight: 1.5 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+                  Leer términos de uso y privacidad
+                </summary>
+                <p>
+                  Dotol se utiliza en una investigación académica que compara
+                  el registro manual de tareas con el registro asistido por IA.
+                  Para la tesis se analizarán los tiempos, clics, cantidades de
+                  tareas registradas y respuestas de los cuestionarios SUS y
+                  NASA-TLX. No se publicarán nombres ni correos, y no se
+                  revisará el contenido individual de las tareas como parte del
+                  estudio. La aplicación sí almacena las tareas para funcionar;
+                  los mensajes del chatbot se procesan mediante servicios de
+                  AWS. Participar es voluntario.
+                </p>
+              </details>
+
               <label className="auth-terms">
-                <input type="checkbox" />
-                <span>Acepto los <span className="auth-terms__emphasis">Términos de uso</span> y la <span className="auth-terms__emphasis">Política de privacidad</span>.</span>
+                <input type="checkbox" required />
+                <span>
+                  He leído y acepto los{" "}
+                  <span className="auth-terms__emphasis">términos de uso y privacidad</span>
+                  {" "}para participar en la evaluación académica.
+                </span>
               </label>
 
               <button type="submit" className="auth-submit" disabled={cargando}>

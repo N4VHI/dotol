@@ -13,6 +13,7 @@ import {
 import EvaluationControlPage from "./EvaluationControlPage";
 import EvaluationFinishedPage from "./EvaluationFinishedPage";
 import EvaluationInstructionsPage from "./EvaluationInstructionsPage";
+import EvaluationWelcomePage from "./EvaluationWelcomePage";
 import NasaTlxMockPage from "./NasaTlxMockPage";
 import SusMockPage from "./SusMockPage";
 import "../styles/evaluation.css";
@@ -27,12 +28,46 @@ function registroActual(estado: ResumenEvaluacion | null): RegistroEvaluacion | 
   return estado?.evaluaciones.find((item) => item.tipo_prueba === estado.metodo_actual);
 }
 
+// Esta marca solo evita repetir la bienvenida al recargar la pestaña.
+// Está asociada a la cuenta, pero NO es una aceptación de consentimiento.
+function claveBienvenida(accessToken: string): string | null {
+  try {
+    const segmento = accessToken.split(".")[1];
+    if (!segmento) return null;
+    const base64 = segmento.replace(/-/g, "+").replace(/_/g, "/");
+    const datos: unknown = JSON.parse(atob(base64));
+    if (datos && typeof datos === "object" && "sub" in datos && typeof datos.sub === "string") {
+      return `dotol:bienvenida:v1:${datos.sub}`;
+    }
+  } catch {
+    // La bienvenida sigue funcionando sin almacenamiento si el token es inesperado.
+  }
+  return null;
+}
+
 export default function EvaluationGatePage({ accessToken, onEstadoActualizado }: Props) {
   const navigate = useNavigate();
   const [estado, setEstado] = useState<ResumenEvaluacion | null>(null);
   const [cargando, setCargando] = useState(true);
   const [trabajando, setTrabajando] = useState<null | "preparar" | "iniciar" | "tlx" | "sus">(null);
   const [error, setError] = useState("");
+
+  const [bienvenidaVista, setBienvenidaVista] = useState(() => {
+    const clave = claveBienvenida(accessToken);
+    if (!clave) return false;
+    try { return window.sessionStorage.getItem(clave) === "1"; }
+    catch { return false; }
+  });
+
+  function continuarBienvenida() {
+    setBienvenidaVista(true);
+    const clave = claveBienvenida(accessToken);
+    if (clave) {
+      try { window.sessionStorage.setItem(clave, "1"); }
+      catch { /* Se puede continuar aunque sessionStorage esté bloqueado. */ }
+    }
+  }
+
 
   const actualizar = useCallback((datos: ResumenEvaluacion) => {
     setEstado(datos);
@@ -141,7 +176,11 @@ export default function EvaluationGatePage({ accessToken, onEstadoActualizado }:
       {error && <div className="dt-eval-global-error" role="alert">{error}</div>}
 
       {estado.estado_global === "no_iniciada" && (
-        <EvaluationInstructionsPage preparando={trabajando === "preparar"} onComenzar={(grupos) => void comenzar(grupos)} />
+        bienvenidaVista ? (
+          <EvaluationInstructionsPage preparando={trabajando === "preparar"} onComenzar={(grupos) => void comenzar(grupos)} />
+        ) : (
+          <EvaluationWelcomePage onContinuar={continuarBienvenida} />
+        )
       )}
 
       {/* La Lambda devuelve "instrucciones" al preparar, pero ya creó las dos filas pendientes. */}
