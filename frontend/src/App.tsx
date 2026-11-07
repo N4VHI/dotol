@@ -18,6 +18,24 @@ import {
   type TokensCognito,
 } from "./services/sesion";
 
+
+// Solo se usa para adaptar la interfaz. La autorización real ocurre en la
+// Lambda, leyendo el claim cognito:groups validado por API Gateway.
+function esAdministradorLocal(accessToken?: string): boolean {
+  if (!accessToken) return false;
+  try {
+    const parte = accessToken.split(".")[1];
+    if (!parte) return false;
+    const base64 = parte.replace(/-/g, "+").replace(/_/g, "/");
+    const datos: unknown = JSON.parse(atob(base64));
+    if (!datos || typeof datos !== "object" || !("cognito:groups" in datos)) return false;
+    const grupos = datos["cognito:groups"];
+    return Array.isArray(grupos) && grupos.includes("dotol-admins");
+  } catch {
+    return false;
+  }
+}
+
 type Autenticacion = {
   sesion: Sesion | null;
   fase: "restaurando" | "lista" | "error";
@@ -49,6 +67,7 @@ export default function App() {
 
   const sesion = autenticacion.sesion;
   const token = autenticacion.fase === "lista" ? sesion?.accessToken : undefined;
+  const esAdmin = esAdministradorLocal(token);
 
   // Al recargar se valida la sesión almacenada y se renueva si está por vencer.
   // No mostramos login ni llamamos a la API hasta terminar esta operación.
@@ -59,10 +78,18 @@ export default function App() {
 
     async function restaurar() {
       try {
-        const siguiente = sesion!.expiraEn - Date.now() > 60_000
+        const margen = sesion!.refreshToken ? 60_000 : 0;
+        const siguiente = sesion!.expiraEn - Date.now() > margen
           ? sesion!
-          : crearSesion(await renovarTokens(sesion!));
+          : sesion!.refreshToken
+            ? crearSesion(await renovarTokens(sesion!))
+            : null;
         if (!vigente || version !== versionSesion.current) return;
+        if (!siguiente) {
+          limpiarSesion();
+          setAutenticacion({ sesion: null, fase: "lista" });
+          return;
+        }
         guardarSesion(siguiente);
         setAutenticacion({ sesion: siguiente, fase: "lista" });
       } catch (error: unknown) {
@@ -86,9 +113,14 @@ export default function App() {
     if (autenticacion.fase !== "lista" || !sesion) return;
     let vigente = true;
     const version = versionSesion.current;
-    const restante = Math.max(0, sesion.expiraEn - Date.now() - 60_000);
+    const margen = sesion.refreshToken ? 60_000 : 0;
+    const restante = Math.max(0, sesion.expiraEn - Date.now() - margen);
 
     const temporizador = window.setTimeout(() => {
+      if (!sesion.refreshToken) {
+        cerrarSesionLocal();
+        return;
+      }
       void renovarTokens(sesion)
         .then((tokensNuevos) => {
           if (!vigente || version !== versionSesion.current) return;
@@ -115,7 +147,7 @@ export default function App() {
 
   // Consultar la evaluación solo con un access token listo y vigente.
   useEffect(() => {
-    if (!token) return;
+    if (!token || esAdmin) return;
     const controller = new AbortController();
     void consultarEvaluacion(token, controller.signal)
       .then((estado) => {
@@ -135,7 +167,7 @@ export default function App() {
         if (!controller.signal.aborted) setComprobando(false);
       });
     return () => controller.abort();
-  }, [token]);
+  }, [token, esAdmin]);
 
   function cerrarSesionLocal() {
     versionSesion.current += 1;
@@ -196,17 +228,17 @@ export default function App() {
     );
   }
 
-  const finalizada = evaluacion?.estado_global === "completada";
+  const finalizada = esAdmin || evaluacion?.estado_global === "completada";
   const registroActivo = evaluacion?.evaluaciones.find(
     (item) => item.tipo_prueba === evaluacion.metodo_actual
   );
   const pruebaActiva =
     evaluacion?.estado_global === "en_progreso" && registroActivo?.estado === "en_curso";
-  const entradaNormal = finalizada ? "/inicio" : "/evaluacion";
-  const entrarManual = finalizada || (pruebaActiva && evaluacion?.metodo_actual === "tradicional");
-  const entrarIA = finalizada || (pruebaActiva && evaluacion?.metodo_actual === "ia");
+  const entradaNormal = esAdmin ? "/inicio" : "/evaluacion";
+  const entrarManual = esAdmin || (pruebaActiva && evaluacion?.metodo_actual === "tradicional");
+  const entrarIA = esAdmin || (pruebaActiva && evaluacion?.metodo_actual === "ia");
 
-  if (sesion && (comprobando || !evaluacion)) {
+  if (sesion && !esAdmin && (comprobando || !evaluacion)) {
     return pantallaEstado(
       errorEvaluacion || "Comprobando fase de evaluación…",
       errorEvaluacion ? "No se modificaron tus datos." : "",

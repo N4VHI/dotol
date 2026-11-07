@@ -4,14 +4,14 @@
  */
 export type Sesion = {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
   expiraEn: number; // milisegundos UNIX
   deviceKey?: string;
 };
 
 export type TokensCognito = {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
   expiresIn: number; // segundos
   deviceKey?: string;
 };
@@ -21,7 +21,6 @@ const CLAVE = "dotol:cognito:sesion:v1";
 export function crearSesion(tokens: TokensCognito): Sesion {
   if (
     !tokens.accessToken ||
-    !tokens.refreshToken ||
     !Number.isFinite(tokens.expiresIn) ||
     tokens.expiresIn <= 0
   ) {
@@ -30,7 +29,7 @@ export function crearSesion(tokens: TokensCognito): Sesion {
 
   return {
     accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
+    ...(tokens.refreshToken ? { refreshToken: tokens.refreshToken } : {}),
     expiraEn: Date.now() + tokens.expiresIn * 1000,
     ...(tokens.deviceKey ? { deviceKey: tokens.deviceKey } : {}),
   };
@@ -45,13 +44,14 @@ export function leerSesionGuardada(): Sesion | null {
     const sesion = datos as Record<string, unknown>;
     if (
       typeof sesion.accessToken !== "string" || !sesion.accessToken ||
-      typeof sesion.refreshToken !== "string" || !sesion.refreshToken ||
       typeof sesion.expiraEn !== "number" || !Number.isFinite(sesion.expiraEn)
     ) return null;
 
     return {
       accessToken: sesion.accessToken,
-      refreshToken: sesion.refreshToken,
+      ...(typeof sesion.refreshToken === "string" && sesion.refreshToken
+        ? { refreshToken: sesion.refreshToken }
+        : {}),
       expiraEn: sesion.expiraEn,
       ...(typeof sesion.deviceKey === "string" ? { deviceKey: sesion.deviceKey } : {}),
     };

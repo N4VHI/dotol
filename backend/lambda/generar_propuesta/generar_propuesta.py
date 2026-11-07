@@ -13,6 +13,8 @@ from boto3.dynamodb.types import TypeSerializer
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from limites_ia import AccesoIADenegado, CuotaIAAgotada, reservar_llamada
+
 
 TABLA_TAREAS = os.environ["TABLA_TAREAS"]
 TABLA_PROPUESTAS = os.environ["TABLA_PROPUESTAS"]
@@ -39,7 +41,7 @@ bedrock = boto3.client(
     config=Config(
         connect_timeout=5,
         read_timeout=150,
-        retries={"max_attempts": 2, "mode": "standard"},
+        retries={"total_max_attempts": 1, "mode": "standard"},
     ),
 )
 
@@ -124,16 +126,14 @@ def obtener_tareas_abiertas(user_id):
         for item in resultado.get("Items", []):
             if item.get("estado") != "pendiente":
                 continue
-            tareas.append(
-                {
-                    "id": item["id_tarea"],
-                    "title": item["nombre"],
-                    "due": obtener_fecha_tarea(item),
-                    "created_at": fecha_local(item.get("fecha_creacion")),
-                    "category_id": item.get("id_categoria"),
-                    "category_name": item.get("categoria"),
-                }
-            )
+            tareas.append({
+                "id": item["id_tarea"],
+                "title": item["nombre"],
+                "due": obtener_fecha_tarea(item),
+                "created_at": fecha_local(item.get("fecha_creacion")),
+                "category_id": item.get("id_categoria"),
+                "category_name": item.get("categoria"),
+            })
             if len(tareas) > MAX_TAREAS_CONTEXTO:
                 raise ValueError("Demasiadas tareas pendientes para una solicitud")
 
@@ -181,7 +181,8 @@ def buscar_propuesta_pendiente(user_id):
         pendientes.extend(
             item
             for item in resultado.get("Items", [])
-            if item.get("status") == "pendiente" and not item.get("id_siguiente")
+            if item.get("status") == "pendiente"
+            and not item.get("id_siguiente")
         )
         inicio = resultado.get("LastEvaluatedKey")
         if not inicio:
@@ -210,11 +211,7 @@ def validar_acciones(salida, tareas_abiertas, categorias, hoy):
 
     for accion in acciones:
         if not isinstance(accion, dict) or set(accion) != {
-            "op",
-            "id",
-            "title",
-            "due",
-            "category_id",
+            "op", "id", "title", "due", "category_id"
         }:
             raise ValueError("Campos de acción incorrectos")
 
@@ -231,13 +228,8 @@ def validar_acciones(salida, tareas_abiertas, categorias, hoy):
             if id_tarea is not None:
                 raise ValueError("Create no debe tener ID de tarea")
             if categorias_por_id:
-                if (
-                    not isinstance(id_categoria, str)
-                    or id_categoria not in categorias_por_id
-                ):
-                    raise ValueError(
-                        "Create requiere una categoría existente del usuario"
-                    )
+                if not isinstance(id_categoria, str) or id_categoria not in categorias_por_id:
+                    raise ValueError("Create requiere una categoría existente del usuario")
             elif id_categoria is not None:
                 raise ValueError("No existen categorías para asignar")
         else:
@@ -246,18 +238,8 @@ def validar_acciones(salida, tareas_abiertas, categorias, hoy):
             if id_tarea in ids_utilizados:
                 raise ValueError("Acciones duplicadas sobre una tarea")
             ids_utilizados.add(id_tarea)
-            # La actualización puede proponer un cambio de categoría real.
-            # category_id=None conserva la categoría que ya tiene la tarea.
-            if op == "update":
-                if id_categoria is not None and (
-                    not isinstance(id_categoria, str)
-                    or id_categoria not in categorias_por_id
-                ):
-                    raise ValueError(
-                        "Update requiere un ID de categoría existente o null"
-                    )
-            elif id_categoria is not None:
-                raise ValueError("Complete y delete requieren category_id=null")
+            if id_categoria is not None:
+                raise ValueError("Solo create puede elegir una categoría")
 
         if op in {"create", "update"}:
             if not isinstance(titulo, str) or not titulo.strip():
@@ -289,7 +271,8 @@ def validar_acciones(salida, tareas_abiertas, categorias, hoy):
 
 def lambda_handler(event, context):
     try:
-        user_id = event["requestContext"]["authorizer"]["jwt"]["claims"]["sub"]
+        claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+        user_id = claims["sub"]
 
         try:
             body = json.loads(event.get("body") or "{}")
@@ -302,14 +285,13 @@ def lambda_handler(event, context):
 
         mensaje = body.get("mensaje")
         if not isinstance(mensaje, str) or not 1 <= len(mensaje.strip()) <= 500:
-            return responder(
-                400, {"error": "El mensaje debe tener entre 1 y 500 caracteres"}
-            )
+            return responder(400, {"error": "El mensaje debe tener entre 1 y 500 caracteres"})
         mensaje = mensaje.strip()
 
         id_anterior = body.get("id_propuesta_anterior")
         if id_anterior is not None and (
-            not isinstance(id_anterior, str) or not PATRON_ULID.fullmatch(id_anterior)
+            not isinstance(id_anterior, str)
+            or not PATRON_ULID.fullmatch(id_anterior)
         ):
             return responder(400, {"error": "ID de propuesta anterior inválido"})
 
@@ -336,23 +318,19 @@ def lambda_handler(event, context):
             "ultimo_mensaje": mensaje,
         }
 
+        # Reserva durable y atómica ANTES de cualquier gasto en Bedrock.
+        # Abarca a participantes y administradores, con un techo diario global.
+        reservar_llamada(cliente_dynamodb, usuario=user_id, claims=claims)
+
         inicio = time.perf_counter()
         respuesta_ia = bedrock.converse(
             modelId=MODELO,
             system=[{"text": PROMPT}],
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "text": json.dumps(
-                                {"references": referencias}, ensure_ascii=False
-                            )
-                        }
-                    ],
-                }
-            ],
-            inferenceConfig={"maxTokens": 1600, "temperature": 0.1},
+            messages=[{
+                "role": "user",
+                "content": [{"text": json.dumps({"references": referencias}, ensure_ascii=False)}],
+            }],
+            inferenceConfig={"maxTokens": 1200, "temperature": 0.1},
             outputConfig={
                 "textFormat": {
                     "type": "json_schema",
@@ -400,62 +378,60 @@ def lambda_handler(event, context):
             "latencia_ms": latencia_ms,
         }
 
-        transacciones = [
-            {
-                "Put": {
-                    "TableName": TABLA_PROPUESTAS,
-                    "Item": serializar_item(propuesta),
-                    "ConditionExpression": (
-                        "attribute_not_exists(id_usuario) "
-                        "AND attribute_not_exists(id_propuesta)"
-                    ),
-                }
+        transacciones = [{
+            "Put": {
+                "TableName": TABLA_PROPUESTAS,
+                "Item": serializar_item(propuesta),
+                "ConditionExpression": (
+                    "attribute_not_exists(id_usuario) "
+                    "AND attribute_not_exists(id_propuesta)"
+                ),
             }
-        ]
+        }]
         if anterior:
-            transacciones.append(
-                {
-                    "Update": {
-                        "TableName": TABLA_PROPUESTAS,
-                        "Key": serializar_item(
-                            {
-                                "id_usuario": user_id,
-                                "id_propuesta": anterior["id_propuesta"],
-                            }
-                        ),
-                        "UpdateExpression": (
-                            "SET #status = :continuada, "
-                            "fecha_resolucion = :fecha, id_siguiente = :siguiente"
-                        ),
-                        "ConditionExpression": (
-                            "#status = :pendiente AND attribute_not_exists(id_siguiente)"
-                        ),
-                        "ExpressionAttributeNames": {"#status": "status"},
-                        "ExpressionAttributeValues": {
-                            ":continuada": {"S": "continuada"},
-                            ":pendiente": {"S": "pendiente"},
-                            ":fecha": {"S": ahora_utc},
-                            ":siguiente": {"S": id_propuesta},
-                        },
-                    }
+            transacciones.append({
+                "Update": {
+                    "TableName": TABLA_PROPUESTAS,
+                    "Key": serializar_item({
+                        "id_usuario": user_id,
+                        "id_propuesta": anterior["id_propuesta"],
+                    }),
+                    "UpdateExpression": (
+                        "SET #status = :continuada, "
+                        "fecha_resolucion = :fecha, id_siguiente = :siguiente"
+                    ),
+                    "ConditionExpression": (
+                        "#status = :pendiente AND attribute_not_exists(id_siguiente)"
+                    ),
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {
+                        ":continuada": {"S": "continuada"},
+                        ":pendiente": {"S": "pendiente"},
+                        ":fecha": {"S": ahora_utc},
+                        ":siguiente": {"S": id_propuesta},
+                    },
                 }
-            )
+            })
         cliente_dynamodb.transact_write_items(TransactItems=transacciones)
 
-        return responder(
-            201,
-            {
-                "id_hilo": id_hilo,
-                "id_propuesta": id_propuesta,
-                "respuesta": reply,
-                "acciones": acciones,
-                "status": "pendiente",
-                "tokens_in": propuesta["tokens_in"],
-                "tokens_out": propuesta["tokens_out"],
-                "latencia_ms": latencia_ms,
-            },
-        )
+        return responder(201, {
+            "id_hilo": id_hilo,
+            "id_propuesta": id_propuesta,
+            "respuesta": reply,
+            "acciones": acciones,
+            "status": "pendiente",
+            "tokens_in": propuesta["tokens_in"],
+            "tokens_out": propuesta["tokens_out"],
+            "latencia_ms": latencia_ms,
+        })
 
+    except AccesoIADenegado as exc:
+        return responder(403, {"error": str(exc), "codigo": "IA_FUERA_DE_PRUEBA"})
+    except CuotaIAAgotada as exc:
+        return responder(429, {"error": str(exc), "codigo": "IA_LIMITE_ALCANZADO"})
+    except RuntimeError as exc:
+        print(f"Configuración de protección IA: {exc}")
+        return responder(503, {"error": "El chatbot no está disponible temporalmente"})
     except ConflictoConversacion as exc:
         return responder(409, {"error": str(exc)})
     except CategoriasNoInicializadas as exc:
@@ -465,16 +441,10 @@ def lambda_handler(event, context):
     except ClientError as exc:
         codigo = exc.response["Error"]["Code"]
         print(f"Error AWS: {codigo}")
-        if codigo in {
-            "ConditionalCheckFailedException",
-            "TransactionCanceledException",
-        }:
-            return responder(
-                409,
-                {
-                    "error": "La conversación cambió; actualiza el chat antes de continuar"
-                },
-            )
+        if codigo in {"ConditionalCheckFailedException", "TransactionCanceledException"}:
+            return responder(409, {
+                "error": "La conversación cambió; actualiza el chat antes de continuar"
+            })
         return responder(503, {"error": "No se pudo procesar la solicitud"})
     except Exception as exc:
         print(f"Error: {type(exc).__name__}: {exc}")

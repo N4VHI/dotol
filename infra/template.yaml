@@ -146,6 +146,19 @@ Resources:
           - COGNITO
         UserPoolId: !Ref UsuariosRegistro
 
+  # Grupo de administradores de Dotol
+  # Los usuarios de este grupo pueden utilizar la aplicación
+  # sin las restricciones de la evaluación experimental.
+
+  GrupoAdministradores:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: dotol-admins
+      Description: Administradores de Dotol
+      UserPoolId: !Ref UsuariosRegistro
+      Precedence: 0
+
+
 # API Gateway
 
   ApiTodoChatbot:
@@ -370,6 +383,7 @@ Resources:
         - arm64
       Timeout: 180
       MemorySize: 256
+      ReservedConcurrentExecutions: 2
 
       Environment:
         Variables:
@@ -378,6 +392,10 @@ Resources:
           TABLA_CATEGORIAS: !Ref CategoriasTable
           BEDROCK_MODEL_ID: deepseek.v3-v1:0
           ZONA_HORARIA: America/Lima
+          TABLA_EVALUACIONES: !Ref SesionesEvaluacionTable
+          IA_LIMITE_PARTICIPANTE: '8'
+          IA_LIMITE_ADMIN_DIA: '60'
+          IA_LIMITE_GLOBAL_DIA: '100'
 
       Policies:
         - Statement:
@@ -408,6 +426,13 @@ Resources:
                 - bedrock:InvokeModel
               Resource: !Sub
                 arn:aws:bedrock:${AWS::Region}::foundation-model/deepseek.v3-v1:0
+              
+            - Sid: VerificarYContarUsoIA
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt SesionesEvaluacionTable.Arn
 
       Events:
         GenerarPropuesta:

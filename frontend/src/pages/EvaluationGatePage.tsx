@@ -168,10 +168,7 @@ export default function EvaluationGatePage({ accessToken, onEstadoActualizado }:
       )}
 
       {estado.estado_global === "completada" && (
-        <EvaluationFinishedPage
-          evaluaciones={estado.evaluaciones}
-          onEntrar={() => navigate("/inicio", { replace: true })}
-        />
+        <EvaluationFinishedPage />
       )}
     </>
   );

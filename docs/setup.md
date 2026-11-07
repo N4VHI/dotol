@@ -20,16 +20,16 @@ output: ...\template.yaml is a valid SAM Template
 
 Frontend:
 
-1. Instala node.js
-2. Crear front-end: npm create vite@latest frontend -- --template react-ts
-3. Entrar a frontend con cd frontend y ejecutar:
+4. crear las variables .env.local en la carpeta frontend copiando y pegando para rellenar
+
+VITE_AWS_REGION=..
+VITE_COGNITO_CLIENT_ID=..
+VITE_COGNITO_USER_POOL_ID=..
+VITE_API_URL=..
+
+5. Entrar a frontend con cd frontend y ejecutar:
    * npm install
    * npm run dev
-4. Instalamos tailwind: npm install tailwindcss @tailwindcss/vite react-router
-5. Instalando paquete de icons: npm install lucide-react @fontsource/inter
 
-5. Instalando cognito para la pantalla de registro y login:
-   npm install @aws-sdk/client-cognito-identity-provider
-6. 
 
 

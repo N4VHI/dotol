@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowRight, Eye, EyeOff, Sun } from "lucide-react";
-import { useNavigate } from "react-router";
 
 import AuthLayout from "../components/auth/auth-hero";
 import { iniciarSesion, mensajeErrorCognito } from "../services/auth";
@@ -13,7 +12,6 @@ type LoginPageProps = {
 };
 
 export default function LoginPage({ onIniciarSesion }: LoginPageProps) {
-  const navigate = useNavigate();
   const [correo, setCorreo] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
@@ -28,12 +26,26 @@ export default function LoginPage({ onIniciarSesion }: LoginPageProps) {
     setCargando(true);
 
     try {
-      const resultado = await iniciarSesion(correo, contrasena);
-      onIniciarSesion(resultado);
-      setContrasena("");
-      navigate("/inicio", { replace: true });
-    } catch (errorDesconocido) {
-      setError(mensajeErrorCognito(errorDesconocido));
+      // Separamos el error de Cognito del error al inicializar la sesión React.
+      // Así no confundimos un login correcto con un error de la aplicación.
+      let resultado: Awaited<ReturnType<typeof iniciarSesion>>;
+      try {
+        resultado = await iniciarSesion(correo, contrasena);
+      } catch (errorCognito: unknown) {
+        setError(mensajeErrorCognito(errorCognito));
+        return;
+      }
+
+      try {
+        onIniciarSesion(resultado);
+        setContrasena("");
+        // App.tsx decide el destino según el estado de evaluación.
+      } catch (errorAplicacion: unknown) {
+        const nombre = errorAplicacion && typeof errorAplicacion === "object"
+          && "name" in errorAplicacion && typeof errorAplicacion.name === "string"
+            ? errorAplicacion.name : "ErrorDesconocido";
+        setError(`Cognito aceptó el login, pero dotol no pudo iniciar la sesión (${nombre}).`);
+      }
     } finally {
       setCargando(false);
     }
