@@ -9,6 +9,7 @@ type Props = {
   clicks: number;
   onFinalizar?: () => void;
   finalizando?: boolean;
+  finalizarDeshabilitado?: boolean;
 };
 
 function formatearSegundos(total: number) {
@@ -24,6 +25,7 @@ export default function EvaluationTrialBar({
   clicks,
   onFinalizar,
   finalizando = false,
+  finalizarDeshabilitado = false,
 }: Props) {
   // Date.now() solo se ejecuta en un efecto; nunca durante el render de React.
   const [ahora, setAhora] = useState(0);
@@ -63,7 +65,8 @@ export default function EvaluationTrialBar({
             type="button"
             className="dt-btn dt-btn--primary"
             onClick={onFinalizar}
-            disabled={finalizando}
+            disabled={finalizando || finalizarDeshabilitado}
+            title={finalizarDeshabilitado ? "Registra al menos una tarea antes de terminar la prueba" : undefined}
           >
             {finalizando ? "Finalizando..." : "Terminar prueba"}
           </button>

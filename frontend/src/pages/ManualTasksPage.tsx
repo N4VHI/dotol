@@ -146,6 +146,12 @@ export default function ManualTasksPage({
 
   async function terminarPruebaTradicional() {
     if (!enPrueba || finalizando || procesandoId || mostrarFormulario || tareaEditando) return;
+    // Solo exigimos haber registrado al menos una tarea manual en esta prueba.
+    // No comparamos los nombres, las fechas ni la cantidad total del grupo.
+    if (cantidadPrueba < 1) {
+      setError("Registra al menos una tarea antes de terminar la prueba.");
+      return;
+    }
     // El participante decide cuándo acabar. No comparamos cantidad, nombres o fechas.
     // No mostramos confirmación adicional: el clic en «Terminar prueba» es suficiente.
 
@@ -206,11 +212,18 @@ export default function ManualTasksPage({
             fechaInicio={evaluacionActiva.fecha_inicio}
             clicks={clicks}
             onFinalizar={() => void terminarPruebaTradicional()}
-            finalizando={finalizando || cargando || procesandoId !== null}
+            finalizando={finalizando}
+            finalizarDeshabilitado={
+              cargando || procesandoId !== null || mostrarFormulario ||
+              tareaEditando !== null || cantidadPrueba < 1
+            }
           />
           <EvaluationTaskBrief registro={evaluacionActiva} compacto />
           <p className="dt-eval-progress" role="status">
             Tareas registradas durante esta prueba: <strong>{cantidadPrueba}</strong>
+            {cantidadPrueba === 0 && (
+              <span> · Registra al menos una tarea para habilitar «Terminar prueba».</span>
+            )}
           </p>
         </>
       )}

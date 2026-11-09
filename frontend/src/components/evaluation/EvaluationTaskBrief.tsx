@@ -13,7 +13,7 @@ export default function EvaluationTaskBrief({ registro, compacto = false }: Prop
     <section className={`dt-eval-brief ${compacto ? "dt-eval-brief--compact" : ""}`}>
       <button type="button" className="dt-eval-brief__toggle"
         onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}>
-        <span><ClipboardList size={17} /> Grupo {registro.grupo_asignado ?? "asignado"} · Instrucciones</span>
+        <span><ClipboardList size={17} /> Grupo {registro.grupo_asignado ?? "asignado"} · Tareas a registrar</span>
         {abierto ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
       </button>
       {abierto && (texto ? (

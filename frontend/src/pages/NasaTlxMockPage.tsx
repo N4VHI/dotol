@@ -12,7 +12,7 @@ const DIMENSIONES = [
   { titulo: "Demanda mental", izq: "0 · Muy baja", der: "100 · Muy alta" },
   { titulo: "Demanda física", izq: "0 · Muy baja", der: "100 · Muy alta" },
   { titulo: "Demanda temporal", izq: "0 · Muy baja", der: "100 · Muy alta" },
-  { titulo: "Rendimiento", izq: "0 · Muy bueno", der: "100 · Muy malo", destacado: true },
+  { titulo: "Rendimiento", izq: "0 · Muy bajo", der: "100 · Muy alto"},
   { titulo: "Esfuerzo", izq: "0 · Muy bajo", der: "100 · Muy alto"},
   { titulo: "Frustración", izq: "0 · Muy baja", der: "100 · Muy alta" },
 ] as const;
@@ -39,9 +39,21 @@ export default function NasaTlxMockPage({ enviando, onEnviar }: Props) {
 
   function finalizar() {
     if (enviando) return;
-    const valores = respuestas.filter((valor): valor is number => valor !== null);
+
+    const valores = respuestas.filter(
+      (valor): valor is number => valor !== null
+    );
+
     if (valores.length !== DIMENSIONES.length) return;
-    onEnviar(valores);
+
+    // Rendimiento es el índice 3.
+    // En pantalla: 0 = muy bajo, 100 = muy alto.
+    // Para NASA-TLX: 0 = buen rendimiento, 100 = mal rendimiento.
+    const respuestasParaBackend = valores.map((valor, indice) =>
+      indice === 3 ? 100 - valor : valor
+    );
+
+    onEnviar(respuestasParaBackend);
   }
 
   function dimension(indice: number) {
@@ -51,7 +63,7 @@ export default function NasaTlxMockPage({ enviando, onEnviar }: Props) {
     const estilo = { "--dt-survey-fill": `${valor}%` } as CSSProperties;
 
     return (
-      <div className={`dt-survey-tlx-card ${item.titulo === "Rendimiento" ? "dt-survey-tlx-card--effort" : ""}`} key={indice}>
+      <div className={`dt-survey-tlx-card`} key={indice}>
         <label className="dt-survey-tlx-card__title" htmlFor={`dt-tlx-${indice}`}>
           <span className="dt-survey-tlx-card__number">{String(indice + 1).padStart(2, "0")}</span>
           <span>{item.titulo}</span>
@@ -72,7 +84,6 @@ export default function NasaTlxMockPage({ enviando, onEnviar }: Props) {
           }}
           disabled={enviando}
           aria-valuetext={respondida ? `${valor} de 100` : "Aún no respondida. Mueve la barra para elegir."}
-          aria-describedby={item.titulo === "Rendimiento" ? "dt-tlx-rendimiento-ayuda" : undefined}
         />
         <div className="dt-survey-tlx-card__value" aria-live="off">
           {respondida ? valor : <span className="dt-survey-tlx-card__unanswered">Sin responder</span>}
@@ -81,11 +92,6 @@ export default function NasaTlxMockPage({ enviando, onEnviar }: Props) {
           <span>{item.izq}</span>
           <span>{item.der}</span>
         </div>
-        {item.titulo === "Rendimiento" && (
-          <p id="dt-tlx-rendimiento-ayuda" className="dt-survey-tlx-card__hint">
-            0 = desempeño satisfactorio · 100 = desempeño insatisfactorio
-          </p>
-        )}
       </div>
     );
   }

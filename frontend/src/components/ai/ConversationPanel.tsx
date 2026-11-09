@@ -47,7 +47,7 @@ export default function ConversationPanel({ mensajes, nombre, enviando, bloquead
         <span className="dt-ai-chat__icon" aria-hidden="true"><Sparkles size={21} strokeWidth={1.8} /></span>
         <div className="dt-ai-chat__identity">
           <strong>Dotol AI</strong>
-          <span><i aria-hidden="true" /> Máximo 6 acciones por propuesta, pendientes de aprobación</span>
+          <span><i aria-hidden="true" /> Máximo 6 acciones por mensaje, pendientes de aprobación</span>
         </div>
         <span className="dt-ai-chat__help" title="Ninguna tarea se modifica hasta que aceptes los cambios">
           <CircleHelp size={18} aria-hidden="true" />

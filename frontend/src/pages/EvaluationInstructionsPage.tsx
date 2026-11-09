@@ -77,8 +77,8 @@ export default function EvaluationInstructionsPage({ preparando, onComenzar }: P
           <div className="dt-prep-notice">
             <Shuffle size={20} />
             <p><strong>Asignación aleatoria:</strong> dotol elegirá con qué método comenzarás y
-              cuál de los dos grupos utilizarás en cada prueba. Tendrás a la vista las instrucciones
-              de tu grupo mientras registras las tareas. El cronómetro empezará al iniciar la prueba.
+              cuál de los dos grupos utilizarás en cada prueba. Tendrás a la vista las tareas que registraste
+              en tu grupo mientras las registras. El cronómetro empezará al iniciar la prueba.
             </p>
           </div>
           {error && <p className="dt-feedback dt-feedback--error" role="alert">{error}</p>}

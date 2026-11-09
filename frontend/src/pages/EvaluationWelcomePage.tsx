@@ -45,7 +45,7 @@ export default function EvaluationWelcomePage({ onContinuar }: Props) {
             <h2 id="dt-intro-how-title">¿Qué harás durante la evaluación?</h2>
           </div>
           <ol className="dt-intro-steps">
-            <li><strong>Prepara dos grupos de actividades.</strong> Escribe hasta seis tareas por grupo, con tus propias palabras.</li>
+            <li><strong>Prepara dos grupos de actividades varias.</strong> Escribe hasta seis tareas por grupo, con tus propias palabras.</li>
             <li><strong>Prueba los dos métodos.</strong> Dotol decidirá aleatoriamente el orden y qué grupo utilizarás en cada método.</li>
             <li><strong>Responde dos cuestionarios después de cada método.</strong> NASA-TLX y SUS nos ayudarán a conocer cómo fue tu experiencia.</li>
           </ol>
