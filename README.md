@@ -230,6 +230,7 @@ El proyecto puede evolucionar con futuras mejoras en experiencia de usuario, cap
 
 Desarrollado como parte de un proyecto de tesis universitaria.
 
+**Estudiante:** Navhi Giordano Andrade Saavedra
 **Proyecto:** Dotol — Smart Task Management  
 **Área:** Inteligencia artificial aplicada a la gestión de tareas  
 **Contexto:** Investigación académica universitaria  
