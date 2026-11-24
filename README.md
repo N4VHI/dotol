@@ -10,6 +10,8 @@
   <img src="https://img.shields.io/badge/AWS-Cloud-orange?style=for-the-badge" alt="AWS Cloud"/>
 </p>
 
+[English Version](README_ingles.md)
+
 **Dotol** es una aplicación web de gestión de tareas que integra inteligencia artificial generativa para facilitar el registro y la organización de actividades mediante lenguaje natural.
 
 El proyecto permite explorar dos formas de gestionar tareas: una modalidad tradicional basada en formularios y una modalidad conversacional en la que el usuario describe sus actividades a un asistente de IA, que genera propuestas para organizar su lista de tareas.
